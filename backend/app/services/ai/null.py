@@ -21,3 +21,6 @@ class NullProvider(AIProvider):
 
     def recommend_sources(self, topic_profile, catalog) -> list[int]:
         return []
+
+    def discover_sources(self, topic_profile) -> list[dict]:
+        return []

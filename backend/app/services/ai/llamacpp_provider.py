@@ -1,6 +1,6 @@
 import json
 import logging
-from .base import AIProvider, RelevanceResult
+from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, normalise_discovered
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,16 @@ class LlamaCppProvider(AIProvider):
             f'Return JSON only: {{"duplicate": false}}'
         )
         return bool(data.get("duplicate", False))
+
+    def discover_sources(self, topic_profile) -> list[dict]:
+        raw = self._ask(DISCOVER_PROMPT.format(topic_profile=topic_profile))
+        try:
+            start = raw.index("[")
+            end = raw.rindex("]") + 1
+            return normalise_discovered(json.loads(raw[start:end]))
+        except (ValueError, json.JSONDecodeError) as exc:
+            logger.warning("llama.cpp array parse failed: %s", raw[:300])
+            raise ValueError("Could not parse source list from local model") from exc
 
     def suggest_keywords(self, topic_profile) -> list[str]:
         data = self._ask_json(

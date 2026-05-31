@@ -1,12 +1,166 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTenant } from '@/contexts/TenantContext'
-import { catalogApi } from '@/api/catalog'
+import { catalogApi, type DiscoveredSource } from '@/api/catalog'
 import { sourceApi } from '@/api/sources'
 import type { CatalogSource } from '@/api/types'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Spinner from '@/components/ui/Spinner'
+
+function DiscoverPanel({ tenantId }: { tenantId: number }) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [results, setResults] = useState<DiscoveredSource[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [addingUrl, setAddingUrl] = useState<string | null>(null)
+  const [addedUrls, setAddedUrls] = useState<Set<string>>(new Set())
+
+  const discoverMutation = useMutation({
+    mutationFn: () => catalogApi.discover(tenantId),
+    onSuccess: (data) => {
+      setResults(data.sources)
+      setError(null)
+    },
+    onError: (e: unknown) => {
+      setError(e instanceof Error ? e.message : 'Discovery failed')
+      setResults(null)
+    },
+  })
+
+  const handleDiscover = () => {
+    setOpen(true)
+    setResults(null)
+    setError(null)
+    discoverMutation.mutate()
+  }
+
+  const handleAdd = async (src: DiscoveredSource) => {
+    setAddingUrl(src.url)
+    try {
+      await catalogApi.addDiscovered(tenantId, {
+        name: src.name, url: src.url, type: src.type,
+        category: src.category, description: src.description,
+      })
+      setAddedUrls((prev) => new Set([...prev, src.url]))
+      qc.invalidateQueries({ queryKey: ['sources', tenantId] })
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to add source')
+    } finally {
+      setAddingUrl(null)
+    }
+  }
+
+  if (!tenantId) return null
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #f0f7ff 0%, #fafbff 100%)',
+      border: '1px solid #c7ddf8', borderRadius: 12, padding: 20,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 20 }}>🔍</span>
+            <span style={{ fontWeight: 700, fontSize: 15 }}>Discover Sources with AI</span>
+          </div>
+          <p style={{ fontSize: 12, color: '#5a7fa8', marginTop: 4 }}>
+            Based on your AI Topic Profile, the AI searches for reliable RSS feeds and news sources that match your interests.
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          loading={discoverMutation.isPending}
+          onClick={handleDiscover}
+          disabled={discoverMutation.isPending}
+        >
+          {discoverMutation.isPending ? 'Discovering…' : open ? 'Rediscover' : 'Discover'}
+        </Button>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 16 }}>
+          {discoverMutation.isPending && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#5a7fa8', fontSize: 13 }}>
+              <Spinner size={18} />
+              <span>AI is searching for sources matching your profile…</span>
+            </div>
+          )}
+
+          {error && (
+            <div style={{ background: '#fff1f0', border: '1px solid #ffa39e', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#cf1322' }}>
+              {error}
+            </div>
+          )}
+
+          {results && results.length === 0 && (
+            <p style={{ fontSize: 13, color: '#888' }}>No new sources suggested. Try updating your AI Topic Profile.</p>
+          )}
+
+          {results && results.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginTop: 8 }}>
+              {results.map((src) => {
+                const isAdded = addedUrls.has(src.url) || src.already_in_feed
+                return (
+                  <div key={src.url} style={{
+                    background: '#fff', borderRadius: 10, padding: 14,
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                    border: isAdded ? '2px solid var(--brand-color)' : '2px solid transparent',
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, flex: 1 }}>{src.name}</div>
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        {src.reachable
+                          ? <Badge variant="success">● Live</Badge>
+                          : <Badge variant="neutral">○ Offline</Badge>}
+                        {src.in_catalog && <Badge variant="info">In catalog</Badge>}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      <Badge variant="neutral">{src.category}</Badge>
+                      <Badge variant="neutral">{src.type.toUpperCase()}</Badge>
+                    </div>
+
+                    {src.description && (
+                      <p style={{ fontSize: 12, color: '#666', lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                        {src.description}
+                      </p>
+                    )}
+
+                    {src.reason && (
+                      <p style={{ fontSize: 11, color: '#888', fontStyle: 'italic', lineHeight: 1.4 }}>
+                        {src.reason}
+                      </p>
+                    )}
+
+                    <a href={src.url} target="_blank" rel="noreferrer"
+                      style={{ fontSize: 11, color: '#1677ff', wordBreak: 'break-all', textDecoration: 'none' }}>
+                      {src.url}
+                    </a>
+
+                    <Button
+                      size="sm"
+                      variant={isAdded ? 'secondary' : 'primary'}
+                      disabled={isAdded || addingUrl === src.url}
+                      loading={addingUrl === src.url}
+                      onClick={() => handleAdd(src)}
+                      style={{ marginTop: 'auto' }}
+                    >
+                      {isAdded ? '✓ Added' : '+ Add to Feed'}
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function SourceLibraryPage() {
   const { activeTenant } = useTenant()
@@ -60,6 +214,8 @@ export default function SourceLibraryPage() {
         <h1 style={{ fontSize: 22, fontWeight: 700 }}>Source Library</h1>
         <p style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Curated reliable news sources — click "Add to Feed" to start receiving articles.</p>
       </div>
+
+      <DiscoverPanel tenantId={tenantId} />
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <input

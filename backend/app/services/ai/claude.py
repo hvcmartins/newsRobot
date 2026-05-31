@@ -1,6 +1,6 @@
 import json
 import logging
-from .base import AIProvider, RelevanceResult
+from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, normalise_discovered
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +16,23 @@ class ClaudeProvider(AIProvider):
         self._client = anthropic.Anthropic(api_key=api_key)
         self._model = model
 
-    def _ask(self, prompt: str) -> str:
+    def _ask(self, prompt: str, max_tokens: int = 512) -> str:
         msg = self._client.messages.create(
             model=self._model,
-            max_tokens=512,
+            max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
         return msg.content[0].text.strip()
+
+    def _ask_array(self, prompt: str) -> list:
+        raw = self._ask(prompt, max_tokens=2048)
+        try:
+            start = raw.index("[")
+            end = raw.rindex("]") + 1
+            return json.loads(raw[start:end])
+        except (ValueError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to parse JSON array from Claude: %s", raw[:300])
+            raise ValueError("Could not parse source list from Claude response") from exc
 
     def _ask_json(self, prompt: str) -> dict:
         raw = self._ask(prompt)
@@ -88,6 +98,9 @@ class ClaudeProvider(AIProvider):
         )
         data = self._ask_json(prompt)
         return [str(k) for k in data.get("keywords", [])]
+
+    def discover_sources(self, topic_profile) -> list[dict]:
+        return normalise_discovered(self._ask_array(DISCOVER_PROMPT.format(topic_profile=topic_profile)))
 
     def recommend_sources(self, topic_profile, catalog) -> list[int]:
         if not catalog:

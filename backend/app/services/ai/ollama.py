@@ -1,7 +1,7 @@
 import json
 import logging
 import httpx
-from .base import AIProvider, RelevanceResult
+from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, normalise_discovered
 
 logger = logging.getLogger(__name__)
 
@@ -16,18 +16,28 @@ class OllamaProvider(AIProvider):
         self._base_url = base_url.rstrip("/")
         self._model = model
 
-    def _ask(self, prompt: str) -> str:
+    def _ask(self, prompt: str, max_tokens: int = 512) -> str:
         with httpx.Client(timeout=60) as client:
             resp = client.post(
                 f"{self._base_url}/v1/chat/completions",
                 json={
                     "model": self._model,
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 512,
+                    "max_tokens": max_tokens,
                 },
             )
             resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
+
+    def _ask_array(self, prompt: str) -> list:
+        raw = self._ask(prompt, max_tokens=2048)
+        try:
+            start = raw.index("[")
+            end = raw.rindex("]") + 1
+            return json.loads(raw[start:end])
+        except (ValueError, json.JSONDecodeError) as exc:
+            logger.warning("Ollama array parse failed: %s", raw[:300])
+            raise ValueError("Could not parse source list from Ollama response") from exc
 
     def _ask_json(self, prompt: str) -> dict:
         raw = self._ask(prompt)
@@ -75,6 +85,9 @@ class OllamaProvider(AIProvider):
             f'Return JSON: {{"keywords": ["k1"]}}'
         )
         return [str(k) for k in data.get("keywords", [])]
+
+    def discover_sources(self, topic_profile) -> list[dict]:
+        return normalise_discovered(self._ask_array(DISCOVER_PROMPT.format(topic_profile=topic_profile)))
 
     def recommend_sources(self, topic_profile, catalog) -> list[int]:
         if not catalog:

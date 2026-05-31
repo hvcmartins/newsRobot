@@ -1,6 +1,10 @@
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db
 from app.models import CatalogSource, Source
@@ -105,6 +109,94 @@ def is_in_tenant(catalog_id: int, tenant_id: int, db: Session = Depends(get_db))
                 .first())
     return {"added": existing is not None,
             "source_id": existing.id if existing else None}
+
+
+def _check_url(url: str) -> bool:
+    try:
+        import httpx
+        with httpx.Client(timeout=6, follow_redirects=True) as c:
+            r = c.head(url)
+            return r.status_code < 400
+    except Exception:
+        return False
+
+
+@router.post("/discover")
+def discover_sources(tenant_id: int, db: Session = Depends(get_db)):
+    """Ask the AI to suggest new sources matching the tenant's topic profile.
+    Validates each suggested URL in parallel and returns reachability status."""
+    from app.models import Tenant
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(404, "Tenant not found")
+    if not tenant.topic_profile:
+        raise HTTPException(400, "Set an AI Topic Profile first before discovering sources.")
+
+    from app.services.ai.factory import get_ai_provider
+    from app.services.ai.null import NullProvider
+    ai = get_ai_provider()
+    if isinstance(ai, NullProvider):
+        raise HTTPException(400, "Configure an AI provider in AI Settings to use source discovery.")
+
+    logger.info("Source discovery requested for '%s'", tenant.name)
+    try:
+        suggestions = ai.discover_sources(tenant.topic_profile)
+    except Exception as exc:
+        logger.error("Source discovery failed: %s", exc)
+        raise HTTPException(500, f"AI source discovery failed: {exc}")
+
+    if not suggestions:
+        return {"sources": []}
+
+    # Validate URLs in parallel (max 8 seconds total)
+    tenant_source_urls = {s.url for s in db.query(Source).filter_by(tenant_id=tenant_id).all()}
+    catalog_urls = {c.url for c in db.query(CatalogSource).all()}
+
+    with ThreadPoolExecutor(max_workers=min(len(suggestions), 10)) as pool:
+        futures = {pool.submit(_check_url, s["url"]): i for i, s in enumerate(suggestions)}
+        reachable: dict[int, bool] = {}
+        for future in as_completed(futures, timeout=9):
+            idx = futures[future]
+            try:
+                reachable[idx] = future.result()
+            except Exception:
+                reachable[idx] = False
+
+    result = []
+    for i, s in enumerate(suggestions):
+        result.append({
+            **s,
+            "reachable": reachable.get(i, False),
+            "already_in_feed": s["url"] in tenant_source_urls,
+            "in_catalog": s["url"] in catalog_urls,
+        })
+
+    logger.info("Source discovery returned %d suggestions for '%s'", len(result), tenant.name)
+    return {"sources": result}
+
+
+@router.post("/discover/add", response_model=SourceRead, status_code=201)
+def add_discovered_source(tenant_id: int, data: dict, db: Session = Depends(get_db)):
+    """Add a discovered source (from AI discovery) directly to the tenant feed.
+    Expects body: {name, url, type, category, description}"""
+    from app.models import Source, SourceType
+    if not data.get("url") or not data.get("name"):
+        raise HTTPException(400, "name and url are required")
+    existing = db.query(Source).filter_by(tenant_id=tenant_id, url=data["url"]).first()
+    if existing:
+        raise HTTPException(400, "Source already in your feed")
+    source_type = SourceType.rss if data.get("type", "rss") == "rss" else SourceType.scrape
+    source = Source(
+        tenant_id=tenant_id,
+        name=data["name"],
+        url=data["url"],
+        type=source_type,
+        is_active=True,
+    )
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    return source
 
 
 @router.post("/recommend")
