@@ -22,4 +22,6 @@ export const articleApi = {
   markAllRead: (tenantId: number) =>
     client.patch('/api/articles/read-all', null, { params: { tenant_id: tenantId } }).then((r) => r.data),
   delete: (id: number) => client.delete(`/api/articles/${id}`),
+  clearAll: (tenantId: number) =>
+    client.delete('/api/articles/', { params: { tenant_id: tenantId } }).then((r) => r.data),
 }

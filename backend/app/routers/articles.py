@@ -82,6 +82,14 @@ def mark_read(article_id: int, db: Session = Depends(get_db)):
     return article
 
 
+@router.delete("/")
+def clear_all_articles(tenant_id: int, db: Session = Depends(get_db)):
+    """Delete every article for a tenant so the feed can be re-scraped cleanly."""
+    count = db.query(Article).filter(Article.tenant_id == tenant_id).delete()
+    db.commit()
+    return {"deleted": count}
+
+
 @router.patch("/read-all")
 def mark_all_read(tenant_id: int, db: Session = Depends(get_db)):
     count = (db.query(Article)

@@ -50,6 +50,17 @@ export default function ArticlesPage() {
     },
   })
 
+  const [confirmClear, setConfirmClear] = React.useState(false)
+
+  const clearMut = useMutation({
+    mutationFn: () => articleApi.clearAll(tenantId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['articles', tenantId] })
+      setConfirmClear(false)
+      scrapeMut.mutate()
+    },
+  })
+
   const handleFilterChange = useCallback((f: Filters) => {
     setFilters(f)
     setPage(1)
@@ -67,6 +78,23 @@ export default function ArticlesPage() {
           <Button variant="secondary" size="sm" loading={markAllReadMut.isPending} onClick={() => markAllReadMut.mutate()}>
             Mark all read
           </Button>
+          {confirmClear ? (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: '#c62828' }}>Delete all articles?</span>
+              <Button size="sm" loading={clearMut.isPending}
+                onClick={() => clearMut.mutate()}
+                style={{ background: '#c62828', borderColor: '#c62828' }}>
+                Yes, clear &amp; re-scrape
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setConfirmClear(false)}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button variant="secondary" size="sm" onClick={() => setConfirmClear(true)}>
+              🗑 Clear feed
+            </Button>
+          )}
           <Button size="sm" loading={scrapeMut.isPending} onClick={() => scrapeMut.mutate()}>
             🔄 Scrape now
           </Button>
@@ -80,7 +108,12 @@ export default function ArticlesPage() {
         onChange={handleFilterChange}
       />
 
-      {scrapeMut.isSuccess && (
+      {clearMut.isSuccess && (
+        <p style={{ fontSize: 13, color: 'var(--brand-color)', background: 'var(--brand-color-light)', padding: '8px 12px', borderRadius: 6 }}>
+          Feed cleared — scrape triggered, new articles will appear shortly.
+        </p>
+      )}
+      {!clearMut.isSuccess && scrapeMut.isSuccess && (
         <p style={{ fontSize: 13, color: 'var(--brand-color)', background: 'var(--brand-color-light)', padding: '8px 12px', borderRadius: 6 }}>
           Scrape triggered — new articles will appear shortly.
         </p>
