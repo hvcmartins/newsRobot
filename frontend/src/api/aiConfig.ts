@@ -7,6 +7,7 @@ export interface AIConfigRead {
   model: string | null
   base_url: string | null
   local_model_id: string | null
+  cpu_limit_percent?: number
 }
 
 export interface AIConfigUpdate {
@@ -16,6 +17,7 @@ export interface AIConfigUpdate {
   model?: string | null
   base_url?: string | null
   local_model_id?: string | null
+  cpu_limit_percent?: number
 }
 
 export interface LocalModel {

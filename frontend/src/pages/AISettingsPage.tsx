@@ -132,6 +132,7 @@ export default function AISettingsPage() {
   const [model, setModel] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [localModelId, setLocalModelId] = useState('')
+  const [cpuLimit, setCpuLimit] = useState(80)
   const [saved, setSaved] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
@@ -143,6 +144,7 @@ export default function AISettingsPage() {
     setModel(current.model ?? '')
     setBaseUrl(current.base_url ?? '')
     setLocalModelId(current.local_model_id ?? '')
+    setCpuLimit(current.cpu_limit_percent ?? 80)
     setApiKey('')
   }, [current])
 
@@ -163,6 +165,7 @@ export default function AISettingsPage() {
         model: model || def.defaultModel || null,
         base_url: baseUrl || null,
         local_model_id: provider === 'llamacpp' ? (localModelId || null) : null,
+        cpu_limit_percent: provider === 'llamacpp' ? cpuLimit : undefined,
       }
       if (apiKey.trim()) payload.api_key = apiKey.trim()
       return aiConfigApi.update(payload)
@@ -320,6 +323,31 @@ export default function AISettingsPage() {
               onDownload={id => downloadMut.mutate(id)}
               onDelete={id => deleteMut.mutate(id)}
             />
+          )}
+
+          {provider === 'llamacpp' && (
+            <div style={{ marginTop: 16 }}>
+              <label style={labelStyle}>
+                CPU Usage Limit — {cpuLimit}%
+                {' '}
+                <span style={{ fontWeight: 400, color: '#999' }}>
+                  ({Math.max(1, Math.round((navigator.hardwareConcurrency || 4) * cpuLimit / 100))} of {navigator.hardwareConcurrency || 4} threads)
+                </span>
+              </label>
+              <input
+                type="range"
+                min={25}
+                max={100}
+                step={5}
+                value={cpuLimit}
+                onChange={e => setCpuLimit(Number(e.target.value))}
+                style={{ width: '100%', accentColor: 'var(--brand-color)' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#999', marginTop: 2 }}>
+                <span>25% (slower, keeps system responsive)</span>
+                <span>100% (fastest)</span>
+              </div>
+            </div>
           )}
 
           <div>
