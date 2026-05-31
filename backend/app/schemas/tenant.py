@@ -1,5 +1,6 @@
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+import re
 import datetime
 
 
@@ -14,7 +15,15 @@ class TenantBase(BaseModel):
 
 
 class TenantCreate(TenantBase):
-    pass
+    @field_validator('slug')
+    @classmethod
+    def slug_must_be_valid(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('slug cannot be empty')
+        if not re.match(r'^[a-z0-9][a-z0-9-]*$', v):
+            raise ValueError('slug must contain only lowercase letters, numbers, and hyphens')
+        return v
 
 
 class TenantUpdate(BaseModel):

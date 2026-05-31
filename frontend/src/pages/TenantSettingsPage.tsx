@@ -88,6 +88,11 @@ export default function TenantSettingsPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 640 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>Tenant Settings</h1>
+      {!activeTenant.slug && (
+        <div style={{ background: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: '#e65100' }}>
+          ⚠ This tenant has no slug — saves will fail until you rebuild the container. The startup migration will auto-assign a slug from the company name.
+        </div>
+      )}
 
       <section style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600 }}>General</h2>
@@ -152,9 +157,16 @@ export default function TenantSettingsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Input label="Name" value={newTenant.name} onChange={(e) => setNewTenant(t => ({ ...t, name: e.target.value }))} />
             <Input label="Slug (URL-safe ID)" value={newTenant.slug} onChange={(e) => setNewTenant(t => ({ ...t, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} />
+            {createMut.isError && (
+              <p style={{ fontSize: 12, color: '#e53935' }}>{(createMut.error as Error)?.message}</p>
+            )}
             <div style={{ display: 'flex', gap: 8 }}>
               <Button variant="secondary" onClick={() => setAddingTenant(false)}>Cancel</Button>
-              <Button loading={createMut.isPending} onClick={() => createMut.mutate()}>Create</Button>
+              <Button
+                loading={createMut.isPending}
+                disabled={!newTenant.name.trim() || !newTenant.slug.trim()}
+                onClick={() => createMut.mutate()}
+              >Create</Button>
             </div>
           </div>
         ) : (

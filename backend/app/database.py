@@ -35,6 +35,20 @@ def _migrate():
     _add_column_if_missing("articles", "summary", "TEXT")
     _add_column_if_missing("articles", "ai_enriched", "BOOLEAN DEFAULT 0")
     _add_column_if_missing("tenants", "topic_profile", "TEXT")
+    _fix_empty_slugs()
+
+
+def _fix_empty_slugs() -> None:
+    """Auto-repair tenants that have an empty slug (creates one from the name)."""
+    import re
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT id, name FROM tenants WHERE slug = '' OR slug IS NULL")).fetchall()
+        for row in rows:
+            tenant_id, name = row[0], row[1] or ""
+            slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-') or f"tenant-{tenant_id}"
+            conn.execute(text("UPDATE tenants SET slug = :slug WHERE id = :id"),
+                         {"slug": slug, "id": tenant_id})
+            conn.commit()
 
 
 def _add_column_if_missing(table: str, column: str, col_type: str) -> None:
