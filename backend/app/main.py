@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
 
 
-app = FastAPI(title="NewsRobot API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="NewsRobot API", version="1.0.0", lifespan=lifespan, redirect_slashes=False)
 
 origins = [o.strip() for o in settings.cors_origins.split(",")]
 app.add_middleware(

@@ -34,6 +34,7 @@ def _migrate():
     _add_column_if_missing("ai_config", "local_model_id", "VARCHAR(100)")
     _add_column_if_missing("articles", "summary", "TEXT")
     _add_column_if_missing("articles", "ai_enriched", "BOOLEAN DEFAULT 0")
+    _add_column_if_missing("tenants", "topic_profile", "TEXT")
 
 
 def _add_column_if_missing(table: str, column: str, col_type: str) -> None:
