@@ -13,11 +13,16 @@ _BUILD_TIME = datetime.datetime.utcnow().isoformat()
 from app.config import settings
 from app.database import create_tables
 from app.routers import tenants, sources, articles, email_config, scrape_runs, catalog, ai_config
+from app.routers import logs as logs_router
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+
+# Attach the in-memory buffer handler so UI log page receives app events
+from app.services.log_buffer import LogBufferHandler as _LogBufferHandler
+logging.getLogger().addHandler(_LogBufferHandler())
 logger = logging.getLogger(__name__)
 
 
@@ -52,6 +57,7 @@ app.include_router(email_config.router, prefix="/api/email-config", tags=["email
 app.include_router(scrape_runs.router,  prefix="/api/scrape-runs",  tags=["scrape-runs"])
 app.include_router(catalog.router,      prefix="/api/catalog",      tags=["catalog"])
 app.include_router(ai_config.router,    prefix="/api/ai-config",    tags=["ai"])
+app.include_router(logs_router.router,  prefix="/api/logs",         tags=["logs"])
 
 # Serve built React frontend — check both Docker layout and local dev layout
 _static_dir = next(

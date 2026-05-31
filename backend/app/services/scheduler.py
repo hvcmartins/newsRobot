@@ -11,12 +11,16 @@ def _make_scrape_job(tenant_id: int):
     def job():
         from app.database import SessionLocal
         from app.services.scraper.runner import run_all_sources
+        from app.models import Tenant
         db = SessionLocal()
         try:
-            logger.info("Scheduler: scraping tenant %d", tenant_id)
+            tenant = db.get(Tenant, tenant_id)
+            name = tenant.name if tenant else f"tenant {tenant_id}"
+            logger.info("Scheduled scrape triggered for '%s'", name)
             run_all_sources(tenant_id, db)
+            logger.info("Scheduled scrape complete for '%s'", name)
         except Exception as exc:
-            logger.error("Scheduler: scrape failed for tenant %d: %s", tenant_id, exc)
+            logger.error("Scheduled scrape failed for tenant %d: %s", tenant_id, exc)
         finally:
             db.close()
     return job

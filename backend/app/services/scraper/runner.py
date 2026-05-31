@@ -48,6 +48,9 @@ def _is_near_duplicate(article: ScrapedArticle, recent_articles: list[Article],
 
 def _enrich_article(article_id: int, topic_profile: str | None) -> None:
     """Run AI enrichment on a stored article in a background thread."""
+    import logging as _logging
+    ai_log = _logging.getLogger("app.services.ai.enrichment")
+
     from app.database import SessionLocal
     from app.services.ai.factory import get_ai_provider
 
@@ -58,12 +61,15 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
             return
 
         ai = get_ai_provider()
+        title_short = article.title[:70]
+        ai_log.info("Enriching: '%s'", title_short)
 
         # Summary
         try:
             article.summary = ai.summarize(article.title, article.excerpt or "")
+            ai_log.info("Summary done: '%s'", title_short)
         except Exception as exc:
-            logger.warning("Summarize failed for article %d: %s", article_id, exc)
+            ai_log.warning("Summary failed for '%s': %s", title_short, exc)
 
         # Relevance (uses topic_profile if available)
         if topic_profile:
@@ -72,15 +78,18 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
                                             topic_profile)
                 article.relevance_score = result.score
                 article.relevance_reason = result.reason
+                ai_log.info("Relevance %.2f — '%s'%s",
+                            result.score, title_short,
+                            f" ({result.reason})" if result.reason else "")
             except Exception as exc:
-                logger.warning("Relevance scoring failed for article %d: %s",
-                               article_id, exc)
+                ai_log.warning("Relevance scoring failed for '%s': %s", title_short, exc)
 
         # Category
         try:
             article.category = ai.categorize(article.title, article.excerpt or "", [])
+            ai_log.info("Category: %s — '%s'", article.category, title_short)
         except Exception as exc:
-            logger.warning("Categorize failed for article %d: %s", article_id, exc)
+            ai_log.warning("Categorize failed for '%s': %s", title_short, exc)
 
         article.ai_enriched = True
         db.commit()
@@ -111,6 +120,8 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
     db.commit()
     db.refresh(run)
 
+    logger.info("Scraping '%s' [%s]", source.name, source.type.value.upper())
+
     try:
         if source.type == SourceType.rss:
             scraper = RssScraper(source.url, source.name)
@@ -120,6 +131,7 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
 
         articles = scraper.fetch()
         run.articles_found = len(articles)
+        logger.info("Fetched %d article(s) from '%s'", len(articles), source.name)
 
         # Load recent articles for duplicate detection (last 24h)
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
@@ -157,8 +169,8 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
                                                 tenant.topic_profile)
                     score = result.score
                     if score < settings.ai_relevance_threshold:
-                        logger.debug("Discarding low-relevance article: %s (score=%.2f)",
-                                     art.title, score)
+                        logger.info("Skipped (relevance %.2f): '%s'",
+                                    score, art.title[:70])
                         continue
                 except Exception as exc:
                     logger.warning("Relevance gate failed, keeping article: %s", exc)
@@ -187,8 +199,12 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
                 db.rollback()
 
         db.commit()
+        logger.info("Done '%s': %d new, %d already seen",
+                    source.name, new_count, len(articles) - new_count)
 
         # Async AI enrichment — fire and forget
+        if new_article_ids:
+            logger.info("Queuing AI enrichment for %d article(s)", len(new_article_ids))
         for article_id in new_article_ids:
             t = threading.Thread(
                 target=_enrich_article,
