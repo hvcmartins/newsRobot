@@ -83,8 +83,17 @@ def trigger_enrichment(tenant_id: int, db: Session = Depends(get_db)):
     from app.services.scraper.runner import enrich_pending
     from app.services.ai.factory import get_ai_provider
     from app.services.ai.null import NullProvider
-    if isinstance(get_ai_provider(), NullProvider):
-        raise HTTPException(400, "Configure an AI provider in AI Settings before enriching.")
+    try:
+        ai = get_ai_provider()
+    except Exception as exc:
+        raise HTTPException(400, f"AI provider error: {exc}")
+    if isinstance(ai, NullProvider):
+        raise HTTPException(400, "No AI provider configured. Go to AI Settings and set up a provider first.")
+    # Quick smoke-test so we surface config problems before queuing hundreds of tasks
+    try:
+        ai.summarize("test", "test")
+    except Exception as exc:
+        raise HTTPException(400, f"AI provider is configured but not responding: {exc}")
     queued = enrich_pending(tenant_id, db)
     return {"queued": queued}
 

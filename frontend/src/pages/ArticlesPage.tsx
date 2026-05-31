@@ -69,9 +69,15 @@ export default function ArticlesPage() {
     },
   })
 
+  const [enrichError, setEnrichError] = useState<string | null>(null)
   const enrichMut = useMutation({
     mutationFn: () => articleApi.triggerEnrich(tenantId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['enrichment-status', tenantId] }),
+    onSuccess: (data) => {
+      setEnrichError(null)
+      qc.invalidateQueries({ queryKey: ['enrichment-status', tenantId] })
+      if (data.queued === 0) setEnrichError('No pending articles found — all are already enriched.')
+    },
+    onError: (err: Error) => setEnrichError(err.message),
   })
 
   const handleFilterChange = useCallback((f: Filters) => {
@@ -120,7 +126,7 @@ export default function ArticlesPage() {
       </div>
 
       {/* AI enrichment progress banner */}
-      {enrichTotal > 0 && (
+      {(enrichTotal > 0 || enrichError) && (
         <div style={{
           background: pending > 0 ? '#f3e5f5' : '#e8f5e9',
           borderRadius: 8,
@@ -158,6 +164,11 @@ export default function ArticlesPage() {
               style={{ fontSize: 11, padding: '3px 10px', flexShrink: 0 }}>
               Re-enrich
             </Button>
+          )}
+          {enrichError && (
+            <span style={{ fontSize: 12, color: '#c62828', flex: '1 1 100%', marginTop: 4 }}>
+              ⚠ {enrichError}
+            </span>
           )}
         </div>
       )}

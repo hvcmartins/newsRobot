@@ -262,9 +262,11 @@ def enrich_pending(tenant_id: int, db: Session) -> int:
     tenant: Tenant = db.get(Tenant, tenant_id)
     topic_profile = tenant.topic_profile if tenant else None
 
+    # Use isnot(True) rather than == False so that NULL values (legacy rows
+    # added before the column existed) are also picked up.
     pending = (db.query(Article)
                .filter(Article.tenant_id == tenant_id,
-                       Article.ai_enriched == False,
+                       Article.ai_enriched.isnot(True),
                        Article.duplicate_of_id.is_(None))
                .all())
     count = 0

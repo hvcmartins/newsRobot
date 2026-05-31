@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 from .base import (AIProvider, RelevanceResult,
                    DISCOVER_PROMPT_SHORT, normalise_discovered,
                    repair_json_array, extract_sources_from_text)
@@ -16,24 +17,28 @@ class LlamaCppProvider(AIProvider):
     def __init__(self, model_path: str, cpu_limit_percent: int = 80):
         self._model_path = model_path
         self._cpu_limit_percent = max(25, min(100, cpu_limit_percent))
-        self._llm = None  # lazy-loaded on first use
+        self._llm = None
+        self._load_lock = threading.Lock()  # prevents concurrent model loads (OOM)
 
     def _get_llm(self):
+        # Double-checked locking: cheap check outside, safe load inside
         if self._llm is None:
-            from llama_cpp import Llama
-            import os
-            total = os.cpu_count() or 4
-            n_threads = max(1, round(total * self._cpu_limit_percent / 100))
-            logger.info(
-                "Loading llama.cpp model from %s (threads=%d/%d, cpu_limit=%d%%)",
-                self._model_path, n_threads, total, self._cpu_limit_percent,
-            )
-            self._llm = Llama(
-                model_path=self._model_path,
-                n_ctx=4096,
-                n_threads=n_threads,
-                verbose=False,
-            )
+            with self._load_lock:
+                if self._llm is None:
+                    from llama_cpp import Llama
+                    import os
+                    total = os.cpu_count() or 4
+                    n_threads = max(1, round(total * self._cpu_limit_percent / 100))
+                    logger.info(
+                        "Loading llama.cpp model from %s (threads=%d/%d, cpu_limit=%d%%)",
+                        self._model_path, n_threads, total, self._cpu_limit_percent,
+                    )
+                    self._llm = Llama(
+                        model_path=self._model_path,
+                        n_ctx=4096,
+                        n_threads=n_threads,
+                        verbose=False,
+                    )
         return self._llm
 
     def _ask(self, prompt: str, max_tokens: int = 512) -> str:
