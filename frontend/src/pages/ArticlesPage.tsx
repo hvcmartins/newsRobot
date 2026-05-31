@@ -71,11 +71,20 @@ export default function ArticlesPage() {
 
   const [enrichError, setEnrichError] = useState<string | null>(null)
   const enrichMut = useMutation({
-    mutationFn: () => articleApi.triggerEnrich(tenantId),
+    mutationFn: () => articleApi.triggerEnrich(tenantId, false),
     onSuccess: (data) => {
       setEnrichError(null)
       qc.invalidateQueries({ queryKey: ['enrichment-status', tenantId] })
-      if (data.queued === 0) setEnrichError('No pending articles found — all are already enriched.')
+      if (data.queued === 0) setEnrichError('No pending articles found — use Re-enrich to reprocess all.')
+    },
+    onError: (err: Error) => setEnrichError(err.message),
+  })
+  const reEnrichMut = useMutation({
+    mutationFn: () => articleApi.triggerEnrich(tenantId, true),
+    onSuccess: (data) => {
+      setEnrichError(null)
+      qc.invalidateQueries({ queryKey: ['enrichment-status', tenantId] })
+      qc.invalidateQueries({ queryKey: ['articles', tenantId] })
     },
     onError: (err: Error) => setEnrichError(err.message),
   })
@@ -160,9 +169,10 @@ export default function ArticlesPage() {
           )}
           {pending === 0 && (
             <Button size="sm" variant="secondary"
-              onClick={() => enrichMut.mutate()}
+              loading={reEnrichMut.isPending}
+              onClick={() => reEnrichMut.mutate()}
               style={{ fontSize: 11, padding: '3px 10px', flexShrink: 0 }}>
-              Re-enrich
+              ↺ Re-enrich all
             </Button>
           )}
           {enrichError && (

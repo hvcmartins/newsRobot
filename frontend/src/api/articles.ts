@@ -28,8 +28,8 @@ export const articleApi = {
     client.get<{ total: number; enriched: number; pending: number }>(
       '/api/articles/enrichment-status', { params: { tenant_id: tenantId } }
     ).then((r) => r.data),
-  triggerEnrich: (tenantId: number) =>
+  triggerEnrich: (tenantId: number, force = false) =>
     client.post<{ queued: number }>(
-      '/api/articles/enrich', null, { params: { tenant_id: tenantId } }
+      '/api/articles/enrich', null, { params: { tenant_id: tenantId, force } }
     ).then((r) => r.data),
 }

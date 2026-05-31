@@ -78,8 +78,16 @@ def enrichment_status(tenant_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/enrich")
-def trigger_enrichment(tenant_id: int, db: Session = Depends(get_db)):
-    """Queue AI enrichment for all un-enriched articles of this tenant."""
+def trigger_enrichment(
+    tenant_id: int,
+    force: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Queue AI enrichment for un-enriched articles.
+
+    force=true resets ai_enriched on all articles first, so already-enriched
+    articles are re-processed with the current AI provider and prompts.
+    """
     from app.services.scraper.runner import enrich_pending
     from app.services.ai.factory import get_ai_provider
     from app.services.ai.null import NullProvider
@@ -94,6 +102,12 @@ def trigger_enrichment(tenant_id: int, db: Session = Depends(get_db)):
         ai.summarize("test", "test")
     except Exception as exc:
         raise HTTPException(400, f"AI provider is configured but not responding: {exc}")
+    if force:
+        reset_count = (db.query(Article)
+                       .filter(Article.tenant_id == tenant_id)
+                       .update({"ai_enriched": False, "relevance_score": 0,
+                                "relevance_reason": None, "summary": None, "category": None}))
+        db.commit()
     queued = enrich_pending(tenant_id, db)
     return {"queued": queued}
 
