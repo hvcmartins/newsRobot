@@ -36,40 +36,91 @@ Example element:
 def repair_json_array(raw: str) -> str:
     """Fix common small-model JSON mistakes before parsing.
 
-    Handles the case where the model wraps each object in square brackets
-    instead of curly braces: ["key": "val", ...] → {"key": "val", ...}
-    Also wraps bare comma-separated objects in an outer array when missing.
+    Handles several output patterns seen from local (llama.cpp) models:
+    - Objects wrapped in square brackets: ["key": "val"] → {"key": "val"}
+    - Mixed brackets: ["key": "val"} or {"key": "val"] → {"key": "val"}
+    - Missing outer array: bare {...}, {...} items wrapped in [...]
     """
-    # Replace ["key": ...] style (object with wrong bracket) with {"key": ...}
-    # Only matches flat brackets (no inner [ or ]) which is all we need for
-    # the flat source-dict format.
-    repaired = re.sub(
-        r'\[([^[\]]*"[^"]+"\s*:[^[\]]*)\]',
-        r'{\1}',
-        raw,
-        flags=re.DOTALL,
-    )
-    stripped = repaired.strip()
-    # If result has no outer array wrapper, collect top-level {...} blocks
-    if not stripped.startswith('['):
+    result: list[str] = []
+    # stack tracks what each opener *should* be based on what follows it
+    stack: list[str] = []  # 'obj' or 'arr'
+    in_string = False
+    i = 0
+    n = len(raw)
+
+    while i < n:
+        c = raw[i]
+
+        if in_string:
+            result.append(c)
+            if c == '\\' and i + 1 < n:
+                i += 1
+                result.append(raw[i])
+            elif c == '"':
+                in_string = False
+            i += 1
+            continue
+
+        if c == '"':
+            in_string = True
+            result.append(c)
+            i += 1
+            continue
+
+        if c in '[{':
+            # Peek past whitespace to decide: object or array?
+            j = i + 1
+            while j < n and raw[j] in ' \t\n\r':
+                j += 1
+            is_obj = False
+            if j < n and raw[j] == '"':
+                # Find end of key string
+                k = j + 1
+                while k < n and not (raw[k] == '"' and raw[k - 1] != '\\'):
+                    k += 1
+                k += 1  # past closing quote
+                while k < n and raw[k] in ' \t\n\r':
+                    k += 1
+                if k < n and raw[k] == ':':
+                    is_obj = True
+            stack.append('obj' if is_obj else 'arr')
+            result.append('{' if is_obj else '[')
+            i += 1
+            continue
+
+        if c in ']}':
+            # Close the most recent container with the correct bracket
+            kind = stack.pop() if stack else 'arr'
+            result.append('}' if kind == 'obj' else ']')
+            i += 1
+            continue
+
+        result.append(c)
+        i += 1
+
+    joined = ''.join(result).strip()
+
+    # If no outer array wrapper, collect top-level {...} objects and wrap
+    if not joined.startswith('['):
         objs: list[str] = []
         depth = 0
         start: int | None = None
-        for i, c in enumerate(stripped):
-            if c == '{':
+        for idx, ch in enumerate(joined):
+            if ch == '{':
                 if depth == 0:
-                    start = i
+                    start = idx
                 depth += 1
-            elif c == '}':
+            elif ch == '}':
                 depth -= 1
                 if depth == 0 and start is not None:
-                    objs.append(stripped[start:i + 1])
+                    objs.append(joined[start:idx + 1])
                     start = None
         if objs:
-            stripped = '[' + ','.join(objs) + ']'
+            joined = '[' + ','.join(objs) + ']'
+
     # Remove trailing commas before closing bracket
-    stripped = re.sub(r',(\s*\])', r'\1', stripped)
-    return stripped
+    joined = re.sub(r',(\s*\])', r'\1', joined)
+    return joined
 
 
 def normalise_discovered(raw: list) -> list[dict]:

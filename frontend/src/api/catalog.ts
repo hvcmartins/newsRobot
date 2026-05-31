@@ -31,6 +31,7 @@ export const catalogApi = {
     client
       .post<{ sources: DiscoveredSource[] }>('/api/catalog/discover', null, {
         params: { tenant_id: tenantId },
+        timeout: 180_000,  // local models can be slow — allow up to 3 min
       })
       .then((r) => r.data),
   addDiscovered: (tenantId: number, source: Pick<DiscoveredSource, 'name' | 'url' | 'type' | 'category' | 'description'>) =>
