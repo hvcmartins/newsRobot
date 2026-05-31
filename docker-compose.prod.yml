@@ -1,0 +1,20 @@
+version: "3.9"
+
+# Production single-container build
+
+services:
+  newsrobot:
+    build: .
+    volumes:
+      - /mnt/user/appdata/newsrobot:/data
+    environment:
+      DATABASE_URL: sqlite:////data/newsrobot.db
+      PORT: "8000"
+      LOG_LEVEL: info
+      AI_ENABLED: "${AI_ENABLED:-false}"
+      AI_PROVIDER: "${AI_PROVIDER:-none}"
+      AI_API_KEY: "${AI_API_KEY:-}"
+      AI_MODEL: "${AI_MODEL:-claude-haiku-4-5-20251001}"
+    ports:
+      - "7880:8000"
+    restart: unless-stopped

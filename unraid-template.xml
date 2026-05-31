@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>NewsRobot</Name>
+  <Repository>hvcmartins/newsrobot:latest</Repository>
+  <Registry>https://hub.docker.com/r/hvcmartins/newsrobot</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project>https://github.com/hvcmartins/newsRobot</Project>
+  <Overview>Multi-tenant AI-powered news aggregation robot. Scrapes RSS feeds and web pages, scores articles by relevance using AI, and sends branded email digests. Configure multiple companies, each with their own sources, keywords, and branding.</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/hvcmartins/newsRobot/main/unraid-template.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/hvcmartins/newsRobot/main/logo.png</Icon>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Description>NewsRobot — Multi-tenant news aggregation with AI scoring, email digests, and a curated source library.</Description>
+  <Networking>
+    <Mode>bridge</Mode>
+    <Publish>
+      <Port>
+        <HostPort>7880</HostPort>
+        <ContainerPort>8000</ContainerPort>
+        <Protocol>tcp</Protocol>
+      </Port>
+    </Publish>
+  </Networking>
+  <Data>
+    <Volume>
+      <HostDir>/mnt/user/appdata/newsrobot</HostDir>
+      <ContainerDir>/data</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+  </Data>
+  <Environment>
+    <Variable>
+      <Value>sqlite:////data/newsrobot.db</Value>
+      <Name>DATABASE_URL</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>info</Value>
+      <Name>LOG_LEVEL</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>changeme-set-a-long-random-string</Value>
+      <Name>SECRET_KEY</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>true</Value>
+      <Name>AI_ENABLED</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>claude</Value>
+      <Name>AI_PROVIDER</Name>
+      <Mode><!-- claude | openai | ollama | none --></Mode>
+    </Variable>
+    <Variable>
+      <Value/>
+      <Name>AI_API_KEY</Name>
+      <Mode><!-- Required for claude and openai providers --></Mode>
+    </Variable>
+    <Variable>
+      <Value>claude-haiku-4-5-20251001</Value>
+      <Name>AI_MODEL</Name>
+      <Mode><!-- claude-haiku-4-5-20251001, gpt-4o-mini, llama3.2 --></Mode>
+    </Variable>
+    <Variable>
+      <Value>http://localhost:11434</Value>
+      <Name>AI_BASE_URL</Name>
+      <Mode><!-- Only for Ollama provider --></Mode>
+    </Variable>
+    <Variable>
+      <Value>0.3</Value>
+      <Name>AI_RELEVANCE_THRESHOLD</Name>
+      <Mode><!-- Articles below this score are discarded (0.0-1.0) --></Mode>
+    </Variable>
+  </Environment>
+  <Labels/>
+</Container>
