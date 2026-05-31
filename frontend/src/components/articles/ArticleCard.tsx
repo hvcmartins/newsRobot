@@ -47,7 +47,7 @@ export default function ArticleCard({ article, onMarkRead }: Props) {
           <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#888' }}>
             {article.source.name}
           </span>
-          {article.category && article.category !== 'Uncategorized' && (
+          {article.category && !['Uncategorized', 'Other'].includes(article.category) && (
             <Badge variant="neutral">{article.category}</Badge>
           )}
           {article.relevance_score > 0 && (

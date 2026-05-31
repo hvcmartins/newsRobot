@@ -14,6 +14,28 @@ interface Props {
   onMarkRead: (id: number) => void
 }
 
+const _UNCATEGORIZED = new Set(['Uncategorized', 'Other', '', undefined, null])
+
+function groupByCategory(articles: Article[]): Array<[string, Article[]]> {
+  const map = new Map<string, Article[]>()
+  for (const a of articles) {
+    const cat = (a.category && !_UNCATEGORIZED.has(a.category)) ? a.category : 'General'
+    if (!map.has(cat)) map.set(cat, [])
+    map.get(cat)!.push(a)
+  }
+  return [...map.entries()].sort(([a], [b]) => {
+    if (a === 'General') return 1
+    if (b === 'General') return -1
+    return a.localeCompare(b)
+  })
+}
+
+const grid: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+  gap: 16,
+}
+
 export default function ArticleFeed({
   articles, isLoading, page, pages, total, onPageChange, onMarkRead,
 }: Props) {
@@ -34,28 +56,58 @@ export default function ArticleFeed({
     )
   }
 
+  const hasCategories = articles.some(a => a.category && !_UNCATEGORIZED.has(a.category))
+  const groups = hasCategories ? groupByCategory(articles) : null
+
+  const pagination = pages > 1 && (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 24 }}>
+      <Button variant="secondary" size="sm" disabled={page <= 1}
+        onClick={() => onPageChange(page - 1)}>← Prev</Button>
+      <span style={{ fontSize: 13, color: '#666' }}>Page {page} of {pages} ({total} total)</span>
+      <Button variant="secondary" size="sm" disabled={page >= pages}
+        onClick={() => onPageChange(page + 1)}>Next →</Button>
+    </div>
+  )
+
+  if (groups) {
+    return (
+      <div>
+        {groups.map(([cat, catArticles]) => (
+          <div key={cat} style={{ marginBottom: 32 }}>
+            {cat !== 'General' && (
+              <div style={{
+                borderLeft: '3px solid var(--brand-color)',
+                paddingLeft: 12,
+                marginBottom: 16,
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+                color: 'var(--brand-color)',
+              }}>
+                {cat}
+              </div>
+            )}
+            <div style={grid}>
+              {catArticles.map(a => (
+                <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} />
+              ))}
+            </div>
+          </div>
+        ))}
+        {pagination}
+      </div>
+    )
+  }
+
   return (
     <div>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-        gap: 16,
-        marginBottom: 24,
-      }}>
-        {articles.map((a) => (
+      <div style={{ ...grid, marginBottom: 24 }}>
+        {articles.map(a => (
           <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} />
         ))}
       </div>
-
-      {pages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
-          <Button variant="secondary" size="sm" disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}>← Prev</Button>
-          <span style={{ fontSize: 13, color: '#666' }}>Page {page} of {pages} ({total} total)</span>
-          <Button variant="secondary" size="sm" disabled={page >= pages}
-            onClick={() => onPageChange(page + 1)}>Next →</Button>
-        </div>
-      )}
+      {pagination}
     </div>
   )
 }

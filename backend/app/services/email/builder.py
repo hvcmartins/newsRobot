@@ -10,20 +10,25 @@ logger = logging.getLogger(__name__)
 
 
 def build_email_context(tenant_id: int, articles: list | None,
-                         frequency: str, db: Session) -> dict | None:
+                         frequency: str, db: Session,
+                         preview: bool = False) -> dict | None:
     tenant: Tenant = db.get(Tenant, tenant_id)
     if not tenant:
         return None
 
     config: EmailConfig = (db.query(EmailConfig)
-                           .filter_by(tenant_id=tenant_id, is_active=True)
+                           .filter_by(tenant_id=tenant_id)
                            .first())
-    if not config:
-        return None
 
-    recipients = json.loads(config.recipients_json or "[]")
-    if not recipients:
-        return None
+    # For real sends, require an active config with recipients
+    if not preview:
+        if not config or not config.is_active:
+            return None
+        recipients = json.loads(config.recipients_json or "[]")
+        if not recipients:
+            return None
+    else:
+        recipients = json.loads(config.recipients_json or "[]") if config else []
 
     if articles is None:
         cutoff = {
@@ -45,7 +50,9 @@ def build_email_context(tenant_id: int, articles: list | None,
     if not articles:
         return None
 
-    subject = (config.subject_template
+    subject_tmpl = (config.subject_template if config and config.subject_template
+                    else "{{tenant_name}} — News Digest {{date}}")
+    subject = (subject_tmpl
                .replace("{{tenant_name}}", tenant.name)
                .replace("{{date}}", datetime.datetime.utcnow().strftime("%B %d, %Y")))
 
@@ -67,14 +74,14 @@ def build_email_context(tenant_id: int, articles: list | None,
         "tenant_name":          tenant.name,
         "logo_url":             tenant.logo_url or "",
         "primary_color":        tenant.primary_color or "#0066cc",
-        "intro_text":           config.intro_text or "",
+        "intro_text":           (config.intro_text if config else "") or "",
         "articles":             articles,
         "articles_by_category": articles_by_category,
         "has_categories":       has_categories,
         "date":                 datetime.datetime.utcnow().strftime("%B %d, %Y"),
         "subject":              subject,
-        "from_email":           config.from_email,
-        "from_name":            config.from_name,
+        "from_email":           config.from_email if config else "",
+        "from_name":            config.from_name if config else tenant.name,
         "recipients":           recipients,
         "config":               config,
     }
