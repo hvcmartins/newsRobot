@@ -57,8 +57,8 @@ class OpenAIProvider(AIProvider):
         prompt = (
             f"Company profile: {topic_profile}\n\n"
             f"Article title: {title}\nArticle excerpt: {excerpt or '(none)'}\n\n"
-            "Rate relevance 0.0-1.0. Be strict.\n"
-            'Return JSON only: {"score": 0.0, "reason": "one sentence"}'
+            "Rate relevance 0.0 (irrelevant) to 1.0 (highly relevant). Be strict.\n"
+            'Return JSON only, e.g.: {"score": 0.85, "reason": "Covers EU energy policy directly affecting the company\'s market"}'
         )
         data = self._ask_json(prompt)
         return RelevanceResult(score=float(data.get("score", 0.5)),

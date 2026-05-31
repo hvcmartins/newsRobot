@@ -49,10 +49,10 @@ class ClaudeProvider(AIProvider):
             f"Company profile: {topic_profile}\n\n"
             f"Article title: {title}\n"
             f"Article excerpt: {excerpt or '(none)'}\n\n"
-            "Rate how relevant this article is to the company (0.0 = irrelevant, "
-            "1.0 = highly relevant). Be strict — only score above 0.5 if the article "
-            "is clearly useful to this company.\n"
-            'Return JSON only: {"score": 0.0, "reason": "one sentence"}'
+            "Rate how relevant this article is to the company (0.0 = completely irrelevant, "
+            "1.0 = highly relevant). Be strict — score above 0.5 only if the article is "
+            "clearly useful to this company.\n"
+            'Return JSON only, e.g.: {"score": 0.85, "reason": "Covers EU energy policy directly affecting the company\'s market"}'
         )
         data = self._ask_json(prompt)
         return RelevanceResult(
