@@ -59,10 +59,13 @@ class OllamaProvider(AIProvider):
             raise ValueError(f"Invalid JSON from Ollama: {raw}") from exc
 
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
-        data = self._ask_json(
-            f"Company profile: {topic_profile}\nTitle: {title}\nExcerpt: {excerpt or ''}\n"
-            f"Rate relevance 0.0-1.0.\nReturn JSON: {{\"score\": 0.0, \"reason\": \"\"}}"
+        prompt = (
+            f"Company profile: {topic_profile}\n\n"
+            f"Article title: {title}\nArticle excerpt: {excerpt or '(none)'}\n\n"
+            "Rate relevance 0.0 (irrelevant) to 1.0 (highly relevant). Be strict.\n"
+            'Return JSON only, e.g.: {"score": 0.85, "reason": "Covers EU energy policy directly affecting the company\'s market"}'
         )
+        data = self._ask_json(prompt)
         return RelevanceResult(score=float(data.get("score", 0.5)),
                                reason=str(data.get("reason", "")))
 

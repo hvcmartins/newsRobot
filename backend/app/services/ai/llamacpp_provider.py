@@ -66,14 +66,28 @@ class LlamaCppProvider(AIProvider):
             raise ValueError(f"Invalid JSON from local model: {raw}") from exc
 
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
-        data = self._ask_json(
-            f"Company profile: {topic_profile}\n"
-            f"Article: {title}\n{excerpt or ''}\n"
-            f"Rate relevance 0.0-1.0.\n"
-            f'Return JSON only: {{"score": 0.5, "reason": "one sentence"}}'
+        # Truncate inputs — small models perform better with shorter prompts
+        profile_short = (topic_profile or "")[:300]
+        excerpt_short = (excerpt or "")[:200]
+        prompt = (
+            f"Company profile: {profile_short}\n\n"
+            f"Article title: {title}\nArticle excerpt: {excerpt_short or '(none)'}\n\n"
+            "Score how relevant this article is to the company:\n"
+            "  1.0 = directly about the company's core business\n"
+            "  0.7 = clearly useful background news\n"
+            "  0.5 = tangentially related\n"
+            "  0.0 = completely unrelated\n\n"
+            'Return JSON only, e.g.: {"score": 0.85, "reason": "Covers EU energy policy directly affecting the company\'s market"}'
         )
-        return RelevanceResult(score=float(data.get("score", 0.5)),
-                               reason=str(data.get("reason", "")))
+        data = self._ask_json(prompt)
+        score = float(data.get("score", 0.5))
+        reason = str(data.get("reason", ""))
+        # Discard copied example values from the prompt
+        if reason in ("one sentence", "..."):
+            reason = ""
+        if score == 0.5 and reason == "":
+            logger.warning("llama.cpp score_relevance returned default 0.5 — check model quality")
+        return RelevanceResult(score=score, reason=reason)
 
     def summarize(self, title, excerpt) -> str:
         return self._ask(
