@@ -37,7 +37,7 @@ def get_ai_config(db: Session = Depends(get_db)):
     return _to_read(_get_or_create(db))
 
 
-@router.put("", response_model=AIConfigRead)
+@router.api_route("", methods=["PUT", "PATCH"], response_model=AIConfigRead)
 def update_ai_config(payload: AIConfigUpdate, db: Session = Depends(get_db)):
     cfg = _get_or_create(db)
     cfg.is_enabled = payload.is_enabled

@@ -34,7 +34,7 @@ def get_tenant(slug: str, db: Session = Depends(get_db)):
     return tenant
 
 
-@router.put("/{slug}", response_model=TenantRead)
+@router.api_route("/{slug}", methods=["PUT", "PATCH"], response_model=TenantRead)
 def update_tenant(slug: str, data: TenantUpdate, db: Session = Depends(get_db)):
     tenant = db.query(Tenant).filter_by(slug=slug).first()
     if not tenant:

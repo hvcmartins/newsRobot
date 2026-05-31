@@ -34,7 +34,7 @@ def get_source(source_id: int, db: Session = Depends(get_db)):
     return source
 
 
-@router.put("/{source_id}", response_model=SourceRead)
+@router.api_route("/{source_id}", methods=["PUT", "PATCH"], response_model=SourceRead)
 def update_source(source_id: int, data: SourceUpdate, db: Session = Depends(get_db)):
     source = db.get(Source, source_id)
     if not source:

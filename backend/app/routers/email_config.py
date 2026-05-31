@@ -34,7 +34,7 @@ def create_config(data: EmailConfigCreate, db: Session = Depends(get_db)):
     return cfg
 
 
-@router.put("/{tenant_id}", response_model=EmailConfigRead)
+@router.api_route("/{tenant_id}", methods=["PUT", "PATCH"], response_model=EmailConfigRead)
 def update_config(tenant_id: int, data: EmailConfigUpdate,
                   db: Session = Depends(get_db)):
     cfg = _get_or_404(tenant_id, db)
