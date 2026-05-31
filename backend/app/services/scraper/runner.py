@@ -57,6 +57,7 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
 
     from app.database import SessionLocal
     from app.services.ai.factory import get_ai_provider
+    from app.services.ai.null import NullProvider
 
     db = SessionLocal()
     try:
@@ -65,6 +66,10 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
             return
 
         ai = get_ai_provider()
+        if isinstance(ai, NullProvider):
+            # Real AI not configured yet — leave ai_enriched=False so articles
+            # are picked up again once the user sets up an AI provider.
+            return
         title_short = article.title[:70]
         ai_log.info("Enriching: '%s'", title_short)
 
@@ -246,3 +251,26 @@ def run_all_sources(tenant_id: int, db: Session) -> list[ScrapeRun]:
                .filter_by(tenant_id=tenant_id, is_active=True)
                .all())
     return [run_source(source.id, db) for source in sources]
+
+
+def enrich_pending(tenant_id: int, db: Session) -> int:
+    """Queue AI enrichment for every un-enriched article of a tenant.
+
+    Safe to call at any time — articles already enriched are skipped inside
+    _enrich_article. Returns the number of articles queued.
+    """
+    tenant: Tenant = db.get(Tenant, tenant_id)
+    topic_profile = tenant.topic_profile if tenant else None
+
+    pending = (db.query(Article)
+               .filter(Article.tenant_id == tenant_id,
+                       Article.ai_enriched == False,
+                       Article.duplicate_of_id.is_(None))
+               .all())
+    count = 0
+    for a in pending:
+        _enrich_executor.submit(_enrich_article, a.id, topic_profile)
+        count += 1
+
+    logger.info("Queued enrichment for %d pending articles (tenant %d)", count, tenant_id)
+    return count

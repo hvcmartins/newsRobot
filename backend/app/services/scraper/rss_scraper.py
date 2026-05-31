@@ -56,18 +56,18 @@ def _extract_image(entry) -> str | None:
 
 
 def _parse_feed(raw: bytes, content_type: str, source_url: str):
-    """Parse feed bytes with feedparser, retrying with sanitized XML on failure."""
+    """Parse feed bytes with feedparser, always sanitizing first."""
     headers = {"content-type": content_type, "content-location": source_url}
-    feed = feedparser.parse(raw, response_headers=headers)
-    if feed.bozo and not feed.entries:
-        # Retry once with sanitized XML (fixes bare & in URLs)
-        cleaned = _sanitize_xml(raw)
-        if cleaned != raw:
-            feed2 = feedparser.parse(cleaned, response_headers=headers)
-            if feed2.entries or not feed2.bozo:
-                logger.debug("Feed parsed after XML sanitization: %s", source_url)
-                return feed2
-    return feed
+    # Sanitize first — safe for valid XML, fixes 'invalid token' from control
+    # chars that appear anywhere in the feed (not just before the first entry).
+    sanitized = _sanitize_xml(raw)
+    feed = feedparser.parse(sanitized, response_headers=headers)
+    if not feed.bozo or feed.entries:
+        return feed
+    # Sanitization didn't help; try the raw original in case sanitization
+    # introduced a regression (very unlikely, but fail-safe).
+    feed_raw = feedparser.parse(raw, response_headers=headers)
+    return feed_raw if feed_raw.entries else feed
 
 
 class RssScraper(AbstractScraper):

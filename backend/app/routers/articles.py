@@ -63,6 +63,51 @@ def list_articles(
     )
 
 
+# ── Static-path routes (must come before /{article_id}) ──────────────────────
+
+@router.get("/enrichment-status")
+def enrichment_status(tenant_id: int, db: Session = Depends(get_db)):
+    """Return AI enrichment progress counts for the tenant's articles."""
+    base = db.query(Article).filter(
+        Article.tenant_id == tenant_id,
+        Article.duplicate_of_id.is_(None),
+    )
+    total = base.count()
+    enriched = base.filter(Article.ai_enriched == True).count()
+    return {"total": total, "enriched": enriched, "pending": total - enriched}
+
+
+@router.post("/enrich")
+def trigger_enrichment(tenant_id: int, db: Session = Depends(get_db)):
+    """Queue AI enrichment for all un-enriched articles of this tenant."""
+    from app.services.scraper.runner import enrich_pending
+    from app.services.ai.factory import get_ai_provider
+    from app.services.ai.null import NullProvider
+    if isinstance(get_ai_provider(), NullProvider):
+        raise HTTPException(400, "Configure an AI provider in AI Settings before enriching.")
+    queued = enrich_pending(tenant_id, db)
+    return {"queued": queued}
+
+
+@router.patch("/read-all")
+def mark_all_read(tenant_id: int, db: Session = Depends(get_db)):
+    count = (db.query(Article)
+             .filter(Article.tenant_id == tenant_id, Article.is_read == False)
+             .update({"is_read": True}))
+    db.commit()
+    return {"marked_read": count}
+
+
+@router.delete("/")
+def clear_all_articles(tenant_id: int, db: Session = Depends(get_db)):
+    """Delete every article for a tenant so the feed can be re-scraped cleanly."""
+    count = db.query(Article).filter(Article.tenant_id == tenant_id).delete()
+    db.commit()
+    return {"deleted": count}
+
+
+# ── Parameterised routes ──────────────────────────────────────────────────────
+
 @router.get("/{article_id}", response_model=ArticleRead)
 def get_article(article_id: int, db: Session = Depends(get_db)):
     article = db.get(Article, article_id)
@@ -80,23 +125,6 @@ def mark_read(article_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(article)
     return article
-
-
-@router.delete("/")
-def clear_all_articles(tenant_id: int, db: Session = Depends(get_db)):
-    """Delete every article for a tenant so the feed can be re-scraped cleanly."""
-    count = db.query(Article).filter(Article.tenant_id == tenant_id).delete()
-    db.commit()
-    return {"deleted": count}
-
-
-@router.patch("/read-all")
-def mark_all_read(tenant_id: int, db: Session = Depends(get_db)):
-    count = (db.query(Article)
-             .filter(Article.tenant_id == tenant_id, Article.is_read == False)
-             .update({"is_read": True}))
-    db.commit()
-    return {"marked_read": count}
 
 
 @router.delete("/{article_id}", status_code=204)

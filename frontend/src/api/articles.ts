@@ -24,4 +24,12 @@ export const articleApi = {
   delete: (id: number) => client.delete(`/api/articles/${id}`),
   clearAll: (tenantId: number) =>
     client.delete('/api/articles/', { params: { tenant_id: tenantId } }).then((r) => r.data),
+  enrichmentStatus: (tenantId: number) =>
+    client.get<{ total: number; enriched: number; pending: number }>(
+      '/api/articles/enrichment-status', { params: { tenant_id: tenantId } }
+    ).then((r) => r.data),
+  triggerEnrich: (tenantId: number) =>
+    client.post<{ queued: number }>(
+      '/api/articles/enrich', null, { params: { tenant_id: tenantId } }
+    ).then((r) => r.data),
 }
