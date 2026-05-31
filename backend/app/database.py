@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 from app.config import settings
@@ -26,3 +26,21 @@ def get_db():
 def create_tables():
     import app.models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    _migrate()
+
+
+def _migrate():
+    """Add columns that were introduced after initial schema creation."""
+    _add_column_if_missing("ai_config", "local_model_id", "VARCHAR(100)")
+    _add_column_if_missing("articles", "summary", "TEXT")
+    _add_column_if_missing("articles", "ai_enriched", "BOOLEAN DEFAULT 0")
+
+
+def _add_column_if_missing(table: str, column: str, col_type: str) -> None:
+    with engine.connect() as conn:
+        result = conn.execute(text(f"PRAGMA table_info({table})"))
+        existing = {row[1] for row in result}
+        if column not in existing:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+            conn.commit()
+
