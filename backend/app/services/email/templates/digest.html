@@ -12,6 +12,19 @@
     .header h1 { color: #ffffff; margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
     .header p { color: rgba(255,255,255,0.8); margin: 6px 0 0; font-size: 13px; }
     .intro { padding: 20px 32px; color: #555; font-size: 14px; line-height: 1.6; border-bottom: 1px solid #eee; }
+    /* Category section header */
+    .category-section { }
+    .category-header {
+      padding: 10px 32px;
+      background: #f8f9fa;
+      border-left: 3px solid {{ primary_color }};
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: {{ primary_color }};
+    }
+    /* Articles */
     .article { padding: 20px 32px; border-bottom: 1px solid #eee; }
     .article:last-of-type { border-bottom: none; }
     .article img { width: 100%; max-height: 200px; object-fit: cover; border-radius: 6px; margin-bottom: 12px; display: block; }
@@ -42,35 +55,73 @@
   <div class="intro">{{ intro_text }}</div>
   {% endif %}
 
-  {% for article in articles %}
-  <div class="article">
-    {% if article.image_url %}
-    <img src="{{ article.image_url }}" alt="">
-    {% endif %}
-
-    <div class="article-meta">
-      <span class="source-dot"></span>
-      <span class="source-name">{{ article.source.name }}</span>
-      {% if article.category and article.category != 'Uncategorized' %}
-      <span class="category-badge">{{ article.category }}</span>
+  {% if has_categories %}
+    {# Render articles grouped by AI-assigned topic category #}
+    {% for category, cat_articles in articles_by_category %}
+    <div class="category-section">
+      {% if category != "General" %}
+      <div class="category-header">{{ category }}</div>
       {% endif %}
-      {% if article.relevance_score > 0 %}
-      <span class="relevance-bar"><span class="relevance-fill" style="width:{{ (article.relevance_score * 100)|int }}%"></span></span>
+      {% for article in cat_articles %}
+      <div class="article">
+        {% if article.image_url %}
+        <img src="{{ article.image_url }}" alt="">
+        {% endif %}
+
+        <div class="article-meta">
+          <span class="source-dot"></span>
+          <span class="source-name">{{ article.source.name }}</span>
+          {% if article.relevance_score > 0 %}
+          <span class="relevance-bar"><span class="relevance-fill" style="width:{{ (article.relevance_score * 100)|int }}%"></span></span>
+          {% endif %}
+        </div>
+
+        <h2><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a></h2>
+
+        {% set display_text = article.summary or article.excerpt %}
+        {% if display_text %}
+        <p>{{ display_text }}</p>
+        {% endif %}
+
+        <div class="date">
+          {% if article.published_at %}{{ article.published_at.strftime("%B %d, %Y") }}{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  {% else %}
+    {# Flat list (AI not enabled or articles not yet enriched) #}
+    {% for article in articles %}
+    <div class="article">
+      {% if article.image_url %}
+      <img src="{{ article.image_url }}" alt="">
       {% endif %}
+
+      <div class="article-meta">
+        <span class="source-dot"></span>
+        <span class="source-name">{{ article.source.name }}</span>
+        {% if article.category and article.category not in ('Uncategorized', 'Other') %}
+        <span class="category-badge">{{ article.category }}</span>
+        {% endif %}
+        {% if article.relevance_score > 0 %}
+        <span class="relevance-bar"><span class="relevance-fill" style="width:{{ (article.relevance_score * 100)|int }}%"></span></span>
+        {% endif %}
+      </div>
+
+      <h2><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a></h2>
+
+      {% set display_text = article.summary or article.excerpt %}
+      {% if display_text %}
+      <p>{{ display_text }}</p>
+      {% endif %}
+
+      <div class="date">
+        {% if article.published_at %}{{ article.published_at.strftime("%B %d, %Y") }}{% endif %}
+      </div>
     </div>
-
-    <h2><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a></h2>
-
-    {% set display_text = article.summary or article.excerpt %}
-    {% if display_text %}
-    <p>{{ display_text }}</p>
-    {% endif %}
-
-    <div class="date">
-      {% if article.published_at %}{{ article.published_at.strftime("%B %d, %Y") }}{% endif %}
-    </div>
-  </div>
-  {% endfor %}
+    {% endfor %}
+  {% endif %}
 
   <div class="footer">
     You are receiving this email because you subscribed to {{ tenant_name }} news alerts.<br>

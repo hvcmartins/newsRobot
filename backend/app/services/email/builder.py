@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+from collections import defaultdict
 from sqlalchemy.orm import Session
 
 from app.models import Tenant, EmailConfig, Article, EmailFrequency
@@ -48,16 +49,32 @@ def build_email_context(tenant_id: int, articles: list | None,
                .replace("{{tenant_name}}", tenant.name)
                .replace("{{date}}", datetime.datetime.utcnow().strftime("%B %d, %Y")))
 
+    # Group by AI-assigned category for the template
+    _UNCATEGORIZED = {"Uncategorized", "Other", "", None}
+    groups: dict[str, list] = defaultdict(list)
+    for a in articles:
+        cat = a.category if a.category and a.category not in _UNCATEGORIZED else "General"
+        groups[cat].append(a)
+
+    # Real categories first (sorted), "General" last
+    ordered_cats = sorted(groups.keys(), key=lambda c: (c == "General", c))
+    articles_by_category = [(cat, groups[cat]) for cat in ordered_cats]
+
+    # Only show category headers when at least one named category exists
+    has_categories = any(c != "General" for c in groups)
+
     return {
-        "tenant_name":   tenant.name,
-        "logo_url":      tenant.logo_url or "",
-        "primary_color": tenant.primary_color or "#0066cc",
-        "intro_text":    config.intro_text or "",
-        "articles":      articles,
-        "date":          datetime.datetime.utcnow().strftime("%B %d, %Y"),
-        "subject":       subject,
-        "from_email":    config.from_email,
-        "from_name":     config.from_name,
-        "recipients":    recipients,
-        "config":        config,
+        "tenant_name":          tenant.name,
+        "logo_url":             tenant.logo_url or "",
+        "primary_color":        tenant.primary_color or "#0066cc",
+        "intro_text":           config.intro_text or "",
+        "articles":             articles,
+        "articles_by_category": articles_by_category,
+        "has_categories":       has_categories,
+        "date":                 datetime.datetime.utcnow().strftime("%B %d, %Y"),
+        "subject":              subject,
+        "from_email":           config.from_email,
+        "from_name":            config.from_name,
+        "recipients":           recipients,
+        "config":               config,
     }

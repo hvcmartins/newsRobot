@@ -68,8 +68,9 @@ def test_send(tenant_id: int, db: Session = Depends(get_db)):
 def preview_email(tenant_id: int, db: Session = Depends(get_db)):
     from app.services.email.builder import build_email_context
     from app.services.email.sender import render_email
-    context = build_email_context(tenant_id, None, "daily", db)
+    # Use "preview" frequency so no time cutoff is applied — show most recent articles
+    context = build_email_context(tenant_id, None, "preview", db)
     if not context:
-        return HTMLResponse("<p>No articles available to preview.</p>")
+        return HTMLResponse("<p style='font-family:sans-serif;padding:32px;color:#666'>No articles found. Run a scrape first to populate your feed.</p>")
     html, _ = render_email(context)
     return HTMLResponse(html)

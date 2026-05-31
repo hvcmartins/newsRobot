@@ -88,13 +88,30 @@ def discover_sources(tenant_id: int, db: Session = Depends(get_db)):
         raise HTTPException(400, "Configure an AI provider in AI Settings to use source discovery.")
 
     logger.info("Source discovery requested for '%s'", tenant.name)
+
+    ai_error: Exception | None = None
     try:
         suggestions = ai.discover_sources(tenant.topic_profile)
     except Exception as exc:
-        logger.error("Source discovery failed: %s", exc)
-        raise HTTPException(500, f"AI source discovery failed: {exc}")
+        logger.error("AI source discovery failed: %s", exc)
+        ai_error = exc
+        suggestions = []
+
+    # Augment with real internet search (non-blocking — failure is acceptable)
+    try:
+        from app.services.feed_search import web_search_feeds
+        web_feeds = web_search_feeds(tenant.topic_profile)
+        ai_urls = {s["url"] for s in suggestions}
+        new_from_web = [f for f in web_feeds if f["url"] not in ai_urls]
+        if new_from_web:
+            logger.info("Web search added %d sources for '%s'", len(new_from_web), tenant.name)
+            suggestions = suggestions + new_from_web
+    except Exception as exc:
+        logger.warning("Web feed search failed (non-critical): %s", exc)
 
     if not suggestions:
+        if ai_error:
+            raise HTTPException(500, f"AI source discovery failed: {ai_error}")
         return {"sources": []}
 
     # Validate URLs in parallel (max 8 seconds total)
