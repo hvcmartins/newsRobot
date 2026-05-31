@@ -18,18 +18,23 @@ _HEADERS = {
 # Matches & not already part of a valid XML entity reference or char ref
 _BARE_AMP = re.compile(r'&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)')
 
+# Characters illegal in XML 1.0: everything below 0x20 except tab/LF/CR,
+# plus DEL (0x7F).  These cause "invalid token" parse errors.
+_INVALID_XML_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+
 
 def _sanitize_xml(raw: bytes) -> bytes:
-    """Escape bare & characters that make strict XML parsers choke.
+    """Fix the two most common XML issues that cause feedparser to fail.
 
-    The most common cause of 'not well-formed (invalid token)' in RSS feeds
-    is an unescaped & in a URL query string, e.g. ?foo=1&bar=2 which should
-    be ?foo=1&amp;bar=2.
+    1. Control characters (0x00–0x1F except tab/LF/CR, plus DEL) — illegal
+       in XML 1.0 and the usual cause of 'not well-formed (invalid token)'.
+    2. Bare & in attribute values / text — the usual cause of 'undefined entity'.
     """
     try:
         text = raw.decode('utf-8', errors='replace')
-        fixed = _BARE_AMP.sub('&amp;', text)
-        return fixed.encode('utf-8')
+        text = _INVALID_XML_CHARS.sub('', text)   # strip illegal chars
+        text = _BARE_AMP.sub('&amp;', text)        # escape bare ampersands
+        return text.encode('utf-8')
     except Exception:
         return raw
 
