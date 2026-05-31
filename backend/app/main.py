@@ -44,7 +44,13 @@ app.include_router(email_config.router, prefix="/api/email-config", tags=["email
 app.include_router(scrape_runs.router,  prefix="/api/scrape-runs",  tags=["scrape-runs"])
 app.include_router(catalog.router,      prefix="/api/catalog",      tags=["catalog"])
 
-# Serve built React frontend (production Docker image)
-_static_dir = Path(__file__).parent.parent.parent / "static"
-if _static_dir.exists():
+# Serve built React frontend — check both Docker layout and local dev layout
+_static_dir = next(
+    (p for p in [
+        Path(__file__).parent.parent / "static",         # Docker: /app/static
+        Path(__file__).parent.parent.parent / "static",  # local dev
+    ] if p.exists()),
+    None,
+)
+if _static_dir:
     app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="static")
