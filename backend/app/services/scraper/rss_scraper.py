@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 def _strip_html(text: str) -> str:
-    return BeautifulSoup(text, "html.parser").get_text(separator=" ").strip()
+    return BeautifulSoup(text, "lxml").get_text(separator=" ").strip()
 
 
 def _extract_image(entry) -> str | None:

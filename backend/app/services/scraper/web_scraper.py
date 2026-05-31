@@ -20,7 +20,7 @@ class WebScraper(AbstractScraper):
             resp = client.get(self.source_url, headers=_HEADERS)
             resp.raise_for_status()
 
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(resp.text, "lxml")
         items = soup.select(self.css_selector)
 
         results = []
