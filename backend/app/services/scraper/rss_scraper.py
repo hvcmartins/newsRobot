@@ -1,5 +1,6 @@
 import datetime
 import logging
+import re
 import app.compat  # noqa: F401 — patch html.parser before feedparser loads
 import feedparser
 import httpx
@@ -13,6 +14,24 @@ _HEADERS = {
     "User-Agent": "NewsRobot/1.0 (RSS aggregator)",
     "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
 }
+
+# Matches & not already part of a valid XML entity reference or char ref
+_BARE_AMP = re.compile(r'&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)')
+
+
+def _sanitize_xml(raw: bytes) -> bytes:
+    """Escape bare & characters that make strict XML parsers choke.
+
+    The most common cause of 'not well-formed (invalid token)' in RSS feeds
+    is an unescaped & in a URL query string, e.g. ?foo=1&bar=2 which should
+    be ?foo=1&amp;bar=2.
+    """
+    try:
+        text = raw.decode('utf-8', errors='replace')
+        fixed = _BARE_AMP.sub('&amp;', text)
+        return fixed.encode('utf-8')
+    except Exception:
+        return raw
 
 
 def _strip_html(text: str) -> str:
@@ -29,6 +48,21 @@ def _extract_image(entry) -> str | None:
         if mc.get("medium") == "image" or mc.get("type", "").startswith("image/"):
             return mc.get("url")
     return None
+
+
+def _parse_feed(raw: bytes, content_type: str, source_url: str):
+    """Parse feed bytes with feedparser, retrying with sanitized XML on failure."""
+    headers = {"content-type": content_type, "content-location": source_url}
+    feed = feedparser.parse(raw, response_headers=headers)
+    if feed.bozo and not feed.entries:
+        # Retry once with sanitized XML (fixes bare & in URLs)
+        cleaned = _sanitize_xml(raw)
+        if cleaned != raw:
+            feed2 = feedparser.parse(cleaned, response_headers=headers)
+            if feed2.entries or not feed2.bozo:
+                logger.debug("Feed parsed after XML sanitization: %s", source_url)
+                return feed2
+    return feed
 
 
 class RssScraper(AbstractScraper):
@@ -48,18 +82,15 @@ class RssScraper(AbstractScraper):
             ) from exc
         except httpx.RequestError as exc:
             msg = str(exc)
-            if "Name or service not known" in msg or "Temporary failure" in msg or "No address" in msg:
+            if any(s in msg for s in ("Name or service not known",
+                                       "Temporary failure", "No address")):
                 raise ValueError(
                     f"DNS lookup failed for {self.source_url} — "
                     "the domain may be unreachable from this server's network."
                 ) from exc
             raise ValueError(f"Could not reach feed: {exc}") from exc
 
-        feed = feedparser.parse(
-            raw,
-            response_headers={"content-type": content_type,
-                               "content-location": self.source_url},
-        )
+        feed = _parse_feed(raw, content_type, self.source_url)
 
         if feed.bozo and not feed.entries:
             exc_str = str(feed.bozo_exception)
