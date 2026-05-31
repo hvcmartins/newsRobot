@@ -1,18 +1,15 @@
 """
-Compatibility patches — must be imported before feedparser is used anywhere.
+Compatibility patches applied before feedparser is imported anywhere.
 
-feedparser/sgml.py copies method bytecodes from sgmllib.SGMLParser into its
-own class so they execute in feedparser.sgml's global scope.  Those methods
-(ultimately html.parser.HTMLParser.goahead / handle_starttag) reference
-tagfind_tolerant and attrfind_tolerant, which were:
-  • present in html.parser globals in Python < 3.13
-  • removed from html.parser in Python 3.13
+Python 3.13 removed tagfind_tolerant and attrfind_tolerant from html.parser.
+feedparser 6.x references these names in function bytecode copied from
+HTMLParser, so the NameError surfaces at parse time rather than import time.
 
-The NameError: name 'tagfind_tolerant' is not defined is raised because the
-copied functions look in feedparser.sgml.__dict__, not html.parser.__dict__.
-Fix: inject both names into every scope that might need them.
+We force all feedparser submodules to load, then inject both names into
+every loaded feedparser module's __dict__ and into html.parser's __dict__.
 """
 import re
+import sys
 import html.parser
 
 _tagfind_tolerant = re.compile(r'([a-zA-Z][-.a-zA-Z0-9:_]*)(?:\s|/(?!>))*')
@@ -22,19 +19,25 @@ _attrfind_tolerant = re.compile(
     re.VERBOSE,
 )
 
-# 1. Patch html.parser module globals (Python 3.13+)
+# Patch html.parser module globals
 if not hasattr(html.parser, 'tagfind_tolerant'):
     html.parser.tagfind_tolerant = _tagfind_tolerant
 if not hasattr(html.parser, 'attrfind_tolerant'):
     html.parser.attrfind_tolerant = _attrfind_tolerant
 
-# 2. Patch feedparser.sgml globals — the copied bytecodes execute here,
-#    so this is the scope where the names must exist at call time.
+# Import feedparser now so all its submodules are in sys.modules
 try:
-    import feedparser.sgml as _fp_sgml
-    if not hasattr(_fp_sgml, 'tagfind_tolerant'):
-        _fp_sgml.tagfind_tolerant = _tagfind_tolerant
-    if not hasattr(_fp_sgml, 'attrfind_tolerant'):
-        _fp_sgml.attrfind_tolerant = _attrfind_tolerant
+    import feedparser  # noqa: F401, E402
 except Exception:
     pass
+
+# Patch every loaded feedparser submodule's global namespace
+for _modname, _mod in list(sys.modules.items()):
+    if _modname.startswith('feedparser') and _mod is not None:
+        try:
+            if not hasattr(_mod, 'tagfind_tolerant'):
+                _mod.tagfind_tolerant = _tagfind_tolerant
+            if not hasattr(_mod, 'attrfind_tolerant'):
+                _mod.attrfind_tolerant = _attrfind_tolerant
+        except Exception:
+            pass
