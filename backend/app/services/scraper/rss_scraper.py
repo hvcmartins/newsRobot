@@ -43,9 +43,17 @@ class RssScraper(AbstractScraper):
             raw = resp.content
             content_type = resp.headers.get("content-type", "application/xml")
         except httpx.HTTPStatusError as exc:
-            raise ValueError(f"Feed returned HTTP {exc.response.status_code}: {self.source_url}") from exc
+            raise ValueError(
+                f"Feed returned HTTP {exc.response.status_code}: {self.source_url}"
+            ) from exc
         except httpx.RequestError as exc:
-            raise ValueError(f"Could not reach feed ({exc}): {self.source_url}") from exc
+            msg = str(exc)
+            if "Name or service not known" in msg or "Temporary failure" in msg or "No address" in msg:
+                raise ValueError(
+                    f"DNS lookup failed for {self.source_url} — "
+                    "the domain may be unreachable from this server's network."
+                ) from exc
+            raise ValueError(f"Could not reach feed: {exc}") from exc
 
         feed = feedparser.parse(
             raw,
@@ -54,6 +62,12 @@ class RssScraper(AbstractScraper):
         )
 
         if feed.bozo and not feed.entries:
+            exc_str = str(feed.bozo_exception)
+            if "html" in exc_str.lower():
+                raise ValueError(
+                    "URL returned an HTML page, not an RSS/Atom feed. "
+                    "Check that the URL points to the actual feed (e.g. /feed/ or /rss/)."
+                )
             raise ValueError(f"Failed to parse RSS feed: {feed.bozo_exception}")
 
         results = []

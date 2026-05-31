@@ -1,13 +1,18 @@
 """
 Compatibility patches applied before feedparser is imported anywhere.
 
-Python 3.13 removed tagfind_tolerant and attrfind_tolerant from html.parser.
-feedparser 6.x references these names in function bytecode copied from
-HTMLParser, so the NameError surfaces at parse time rather than import time.
+Python 3.x removed several names from html.parser that feedparser 6.x
+references via function bytecode copied from HTMLParser.  Because the
+bytecode executes in feedparser's own module scope, the NameErrors surface
+at parse time rather than import time.
 
-We force all feedparser submodules to load, then inject both names into
-every loaded feedparser module's __dict__ and into html.parser's __dict__.
+Names injected into every feedparser submodule and html.parser:
+  tagfind_tolerant   – removed from html.parser in Python 3.13
+  attrfind_tolerant  – removed from html.parser in Python 3.13
+  unescape           – was html.parser.unescape (removed in Python 3.9),
+                       now lives at html.unescape
 """
+import html
 import re
 import sys
 import html.parser
@@ -18,12 +23,15 @@ _attrfind_tolerant = re.compile(
     r'(\'[^\']*\'|"[^"]*"|(?![\'"])[^>\s]*))?(?:\s|/(?!>))*',
     re.VERBOSE,
 )
+_unescape = html.unescape
 
 # Patch html.parser module globals
 if not hasattr(html.parser, 'tagfind_tolerant'):
     html.parser.tagfind_tolerant = _tagfind_tolerant
 if not hasattr(html.parser, 'attrfind_tolerant'):
     html.parser.attrfind_tolerant = _attrfind_tolerant
+if not hasattr(html.parser, 'unescape'):
+    html.parser.unescape = _unescape
 
 # Import feedparser now so all its submodules are in sys.modules
 try:
@@ -39,5 +47,7 @@ for _modname, _mod in list(sys.modules.items()):
                 _mod.tagfind_tolerant = _tagfind_tolerant
             if not hasattr(_mod, 'attrfind_tolerant'):
                 _mod.attrfind_tolerant = _attrfind_tolerant
+            if not hasattr(_mod, 'unescape'):
+                _mod.unescape = _unescape
         except Exception:
             pass
