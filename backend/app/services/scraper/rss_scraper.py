@@ -1,5 +1,6 @@
 import datetime
 import logging
+import app.compat  # noqa: F401 — patch html.parser before feedparser loads
 import feedparser
 from bs4 import BeautifulSoup
 
