@@ -1,6 +1,7 @@
 import json
 import logging
-from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, normalise_discovered, repair_json_array
+from .base import (AIProvider, RelevanceResult, DISCOVER_PROMPT,
+                   normalise_discovered, repair_json_array, extract_sources_from_text)
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,13 @@ class OpenAIProvider(AIProvider):
             pass
         try:
             return json.loads(repair_json_array(raw))
-        except (ValueError, json.JSONDecodeError) as exc:
-            logger.warning("Failed to parse JSON array from OpenAI: %s", raw[:300])
-            raise ValueError("Could not parse source list from AI response") from exc
+        except (ValueError, json.JSONDecodeError):
+            pass
+        extracted = extract_sources_from_text(raw)
+        if extracted:
+            return extracted
+        logger.warning("Failed to parse JSON array from OpenAI: %s", raw[:300])
+        raise ValueError("Could not parse source list from AI response")
 
     def _ask_json(self, prompt: str) -> dict:
         raw = self._ask(prompt)

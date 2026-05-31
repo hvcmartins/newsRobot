@@ -1,6 +1,8 @@
 import json
 import logging
-from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, normalise_discovered, repair_json_array
+from .base import (AIProvider, RelevanceResult,
+                   DISCOVER_PROMPT_SHORT, normalise_discovered,
+                   repair_json_array, extract_sources_from_text)
 
 logger = logging.getLogger(__name__)
 
@@ -23,17 +25,17 @@ class LlamaCppProvider(AIProvider):
             logger.info("Loading llama.cpp model from %s (threads=%d)", self._model_path, n_threads)
             self._llm = Llama(
                 model_path=self._model_path,
-                n_ctx=2048,
+                n_ctx=4096,   # enough room for prompt + full JSON response
                 n_threads=n_threads,
                 verbose=False,
             )
         return self._llm
 
-    def _ask(self, prompt: str) -> str:
+    def _ask(self, prompt: str, max_tokens: int = 512) -> str:
         llm = self._get_llm()
         resp = llm.create_chat_completion(
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=512,
+            max_tokens=max_tokens,
             temperature=0.1,
         )
         return resp["choices"][0]["message"]["content"].strip()
@@ -82,20 +84,37 @@ class LlamaCppProvider(AIProvider):
         return bool(data.get("duplicate", False))
 
     def discover_sources(self, topic_profile) -> list[dict]:
-        raw = self._ask(DISCOVER_PROMPT.format(topic_profile=topic_profile))
-        # First attempt: standard parse
+        # Use a shorter prompt and more tokens so the response isn't truncated
+        prompt = DISCOVER_PROMPT_SHORT.format(topic_profile=topic_profile)
+        raw = self._ask(prompt, max_tokens=2048)
+        logger.debug("llama.cpp discover raw output: %s", raw[:500])
+
+        # Attempt 1: standard JSON parse
         try:
             start = raw.index("[")
             end = raw.rindex("]") + 1
-            return normalise_discovered(json.loads(raw[start:end]))
+            sources = normalise_discovered(json.loads(raw[start:end]))
+            if sources:
+                return sources
         except (ValueError, json.JSONDecodeError):
             pass
-        # Second attempt: repair then parse (handles ["key": val] object syntax)
+
+        # Attempt 2: bracket-repair then parse
         try:
-            return normalise_discovered(json.loads(repair_json_array(raw)))
-        except (ValueError, json.JSONDecodeError) as exc:
-            logger.warning("llama.cpp array parse failed: %s", raw[:300])
-            raise ValueError("Could not parse source list from local model") from exc
+            sources = normalise_discovered(json.loads(repair_json_array(raw)))
+            if sources:
+                return sources
+        except (ValueError, json.JSONDecodeError):
+            pass
+
+        # Attempt 3: regex extraction — recovers sources from truncated/mangled output
+        sources = extract_sources_from_text(raw)
+        if sources:
+            logger.info("llama.cpp discover: recovered %d sources via regex extractor", len(sources))
+            return sources
+
+        logger.warning("llama.cpp discover failed to parse output: %s", raw[:400])
+        raise ValueError("Could not parse source list from local model")
 
     def suggest_keywords(self, topic_profile) -> list[str]:
         data = self._ask_json(
