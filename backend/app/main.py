@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import create_tables
-from app.routers import tenants, sources, articles, email_config, scrape_runs, catalog
+from app.routers import tenants, sources, articles, email_config, scrape_runs, catalog, ai_config
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -43,6 +43,7 @@ app.include_router(articles.router,     prefix="/api/articles",     tags=["artic
 app.include_router(email_config.router, prefix="/api/email-config", tags=["email"])
 app.include_router(scrape_runs.router,  prefix="/api/scrape-runs",  tags=["scrape-runs"])
 app.include_router(catalog.router,      prefix="/api/catalog",      tags=["catalog"])
+app.include_router(ai_config.router,    prefix="/api/ai-config",    tags=["ai"])
 
 # Serve built React frontend — check both Docker layout and local dev layout
 _static_dir = next(

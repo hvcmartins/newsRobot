@@ -6,51 +6,84 @@ logger = logging.getLogger(__name__)
 
 _provider: AIProvider | None = None
 
+_DEFAULT_MODELS = {
+    "claude":     "claude-haiku-4-5-20251001",
+    "openai":     "gpt-4o-mini",
+    "perplexity": "llama-3.1-sonar-small-128k-online",
+    "gemini":     "gemini-2.0-flash",
+    "ollama":     "llama3.2",
+}
 
-def get_ai_provider() -> AIProvider:
+# Providers that use OpenAI-compatible APIs — just different base URLs
+_OPENAI_COMPATIBLE_BASE_URLS = {
+    "perplexity": "https://api.perplexity.ai",
+    "gemini":     "https://generativelanguage.googleapis.com/v1beta/openai/",
+}
+
+
+def get_ai_provider(db=None) -> AIProvider:
     global _provider
     if _provider is not None:
         return _provider
-    _provider = _build_provider()
+    _provider = _build_provider(db)
     return _provider
 
 
-def _build_provider() -> AIProvider:
-    from app.config import settings
+def reset_provider():
+    """Force re-initialization on next call — call this after saving AI config."""
+    global _provider
+    _provider = None
 
-    if not settings.ai_enabled or settings.ai_provider in ("none", ""):
+
+def _build_provider(db=None) -> AIProvider:
+    config = _load_config(db)
+
+    if config is None or not config.is_enabled or config.provider in ("none", "", None):
         logger.info("AI disabled — using NullProvider")
         return NullProvider()
 
-    provider = settings.ai_provider.lower()
+    name = config.provider.lower()
+    key = config.api_key
+    model = config.model or _DEFAULT_MODELS.get(name, "")
 
-    if provider == "claude":
-        if not settings.ai_api_key:
-            logger.warning("AI_API_KEY not set for Claude — falling back to NullProvider")
+    if name == "claude":
+        if not key:
+            logger.warning("Claude selected but no API key — NullProvider")
             return NullProvider()
         from .claude import ClaudeProvider
-        logger.info("Using Claude AI provider (model=%s)", settings.ai_model)
-        return ClaudeProvider(api_key=settings.ai_api_key, model=settings.ai_model)
+        logger.info("AI: Claude (model=%s)", model)
+        return ClaudeProvider(api_key=key, model=model)
 
-    if provider == "openai":
-        if not settings.ai_api_key:
-            logger.warning("AI_API_KEY not set for OpenAI — falling back to NullProvider")
+    if name in ("openai", "perplexity", "gemini"):
+        if not key:
+            logger.warning("%s selected but no API key — NullProvider", name)
             return NullProvider()
         from .openai_provider import OpenAIProvider
-        logger.info("Using OpenAI provider (model=%s)", settings.ai_model)
-        return OpenAIProvider(api_key=settings.ai_api_key, model=settings.ai_model)
+        base_url = config.base_url or _OPENAI_COMPATIBLE_BASE_URLS.get(name)
+        logger.info("AI: %s (model=%s, base_url=%s)", name, model, base_url)
+        return OpenAIProvider(api_key=key, model=model, base_url=base_url)
 
-    if provider == "ollama":
+    if name == "ollama":
         from .ollama import OllamaProvider
-        logger.info("Using Ollama provider (url=%s, model=%s)",
-                    settings.ai_base_url, settings.ai_model)
-        return OllamaProvider(base_url=settings.ai_base_url, model=settings.ai_model)
+        base_url = config.base_url or "http://localhost:11434"
+        logger.info("AI: Ollama (url=%s, model=%s)", base_url, model)
+        return OllamaProvider(base_url=base_url, model=model)
 
-    logger.warning("Unknown AI provider '%s' — falling back to NullProvider", provider)
+    logger.warning("Unknown AI provider '%s' — NullProvider", name)
     return NullProvider()
 
 
-def reset_provider():
-    """Force re-initialization on next call (useful after config changes)."""
-    global _provider
-    _provider = None
+def _load_config(db=None):
+    try:
+        from app.models.ai_config import AIConfig
+        if db is not None:
+            return db.query(AIConfig).first()
+        from app.database import SessionLocal
+        session = SessionLocal()
+        try:
+            return session.query(AIConfig).first()
+        finally:
+            session.close()
+    except Exception as exc:
+        logger.warning("Could not load AI config: %s", exc)
+        return None

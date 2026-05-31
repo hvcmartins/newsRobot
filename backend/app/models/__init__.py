@@ -4,6 +4,7 @@ from .source import Source, SourceType
 from .article import Article
 from .email_config import EmailConfig, EmailFrequency
 from .scrape_run import ScrapeRun, RunStatus
+from .ai_config import AIConfig
 
 __all__ = [
     "CatalogSource", "CatalogSourceType",
@@ -12,4 +13,5 @@ __all__ = [
     "Article",
     "EmailConfig", "EmailFrequency",
     "ScrapeRun", "RunStatus",
+    "AIConfig",
 ]

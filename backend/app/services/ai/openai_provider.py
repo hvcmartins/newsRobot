@@ -11,9 +11,9 @@ _CATEGORIES = [
 
 
 class OpenAIProvider(AIProvider):
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, model: str, base_url: str | None = None):
         from openai import OpenAI
-        self._client = OpenAI(api_key=api_key)
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model
 
     def _ask(self, prompt: str) -> str:
