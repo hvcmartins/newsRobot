@@ -1,6 +1,6 @@
 import json
 import logging
-from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, normalise_discovered
+from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, normalise_discovered, repair_json_array
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,10 @@ class OpenAIProvider(AIProvider):
             start = raw.index("[")
             end = raw.rindex("]") + 1
             return json.loads(raw[start:end])
+        except (ValueError, json.JSONDecodeError):
+            pass
+        try:
+            return json.loads(repair_json_array(raw))
         except (ValueError, json.JSONDecodeError) as exc:
             logger.warning("Failed to parse JSON array from OpenAI: %s", raw[:300])
             raise ValueError("Could not parse source list from AI response") from exc

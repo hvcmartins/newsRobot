@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
@@ -30,6 +31,45 @@ Example element:
 "type":"rss","category":"Finance","description":"Global business news",\
 "reason":"Covers financial markets relevant to the company"}}
 """
+
+
+def repair_json_array(raw: str) -> str:
+    """Fix common small-model JSON mistakes before parsing.
+
+    Handles the case where the model wraps each object in square brackets
+    instead of curly braces: ["key": "val", ...] → {"key": "val", ...}
+    Also wraps bare comma-separated objects in an outer array when missing.
+    """
+    # Replace ["key": ...] style (object with wrong bracket) with {"key": ...}
+    # Only matches flat brackets (no inner [ or ]) which is all we need for
+    # the flat source-dict format.
+    repaired = re.sub(
+        r'\[([^[\]]*"[^"]+"\s*:[^[\]]*)\]',
+        r'{\1}',
+        raw,
+        flags=re.DOTALL,
+    )
+    stripped = repaired.strip()
+    # If result has no outer array wrapper, collect top-level {...} blocks
+    if not stripped.startswith('['):
+        objs: list[str] = []
+        depth = 0
+        start: int | None = None
+        for i, c in enumerate(stripped):
+            if c == '{':
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0 and start is not None:
+                    objs.append(stripped[start:i + 1])
+                    start = None
+        if objs:
+            stripped = '[' + ','.join(objs) + ']'
+    # Remove trailing commas before closing bracket
+    stripped = re.sub(r',(\s*\])', r'\1', stripped)
+    return stripped
 
 
 def normalise_discovered(raw: list) -> list[dict]:

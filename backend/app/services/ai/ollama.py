@@ -1,7 +1,7 @@
 import json
 import logging
 import httpx
-from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, normalise_discovered
+from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, normalise_discovered, repair_json_array
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,10 @@ class OllamaProvider(AIProvider):
             start = raw.index("[")
             end = raw.rindex("]") + 1
             return json.loads(raw[start:end])
+        except (ValueError, json.JSONDecodeError):
+            pass
+        try:
+            return json.loads(repair_json_array(raw))
         except (ValueError, json.JSONDecodeError) as exc:
             logger.warning("Ollama array parse failed: %s", raw[:300])
             raise ValueError("Could not parse source list from Ollama response") from exc
