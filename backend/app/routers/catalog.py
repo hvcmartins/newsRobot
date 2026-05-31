@@ -15,6 +15,10 @@ from app.schemas.source import SourceRead
 router = APIRouter()
 
 
+# ── Static-path routes first ─────────────────────────────────────────────────
+# All literal-segment routes MUST be registered before /{catalog_id} routes,
+# otherwise Starlette matches e.g. POST /discover against /{catalog_id}/add.
+
 @router.get("/", response_model=list[CatalogSourceRead])
 def list_catalog(
     category: Optional[str] = None,
@@ -45,14 +49,6 @@ def list_categories(db: Session = Depends(get_db)):
     return [r[0] for r in rows]
 
 
-@router.get("/{catalog_id}", response_model=CatalogSourceRead)
-def get_catalog_source(catalog_id: int, db: Session = Depends(get_db)):
-    cs = db.get(CatalogSource, catalog_id)
-    if not cs:
-        raise HTTPException(404, "Catalog source not found")
-    return cs
-
-
 @router.post("/", response_model=CatalogSourceRead, status_code=201)
 def create_catalog_source(data: CatalogSourceCreate, db: Session = Depends(get_db)):
     if db.query(CatalogSource).filter_by(url=data.url).first():
@@ -62,53 +58,6 @@ def create_catalog_source(data: CatalogSourceCreate, db: Session = Depends(get_d
     db.commit()
     db.refresh(cs)
     return cs
-
-
-@router.put("/{catalog_id}", response_model=CatalogSourceRead)
-def update_catalog_source(catalog_id: int, data: CatalogSourceUpdate,
-                           db: Session = Depends(get_db)):
-    cs = db.get(CatalogSource, catalog_id)
-    if not cs:
-        raise HTTPException(404, "Catalog source not found")
-    for field, value in data.model_dump(exclude_none=True).items():
-        setattr(cs, field, value)
-    db.commit()
-    db.refresh(cs)
-    return cs
-
-
-@router.post("/{catalog_id}/add", response_model=SourceRead)
-def add_to_tenant(catalog_id: int, tenant_id: int, db: Session = Depends(get_db)):
-    cs = db.get(CatalogSource, catalog_id)
-    if not cs:
-        raise HTTPException(404, "Catalog source not found")
-    existing = (db.query(Source)
-                .filter_by(tenant_id=tenant_id, catalog_source_id=catalog_id)
-                .first())
-    if existing:
-        raise HTTPException(400, "This source is already in your feed")
-    source = Source(
-        tenant_id=tenant_id,
-        catalog_source_id=catalog_id,
-        name=cs.name,
-        url=cs.url,
-        type=cs.type,
-        css_selector=cs.css_selector,
-        is_active=True,
-    )
-    db.add(source)
-    db.commit()
-    db.refresh(source)
-    return source
-
-
-@router.get("/{catalog_id}/in-tenant/{tenant_id}")
-def is_in_tenant(catalog_id: int, tenant_id: int, db: Session = Depends(get_db)):
-    existing = (db.query(Source)
-                .filter_by(tenant_id=tenant_id, catalog_source_id=catalog_id)
-                .first())
-    return {"added": existing is not None,
-            "source_id": existing.id if existing else None}
 
 
 def _check_url(url: str) -> bool:
@@ -177,8 +126,7 @@ def discover_sources(tenant_id: int, db: Session = Depends(get_db)):
 
 @router.post("/discover/add", response_model=SourceRead, status_code=201)
 def add_discovered_source(tenant_id: int, data: dict, db: Session = Depends(get_db)):
-    """Add a discovered source (from AI discovery) directly to the tenant feed.
-    Expects body: {name, url, type, category, description}"""
+    """Add a discovered source (from AI discovery) directly to the tenant feed."""
     from app.models import Source, SourceType
     if not data.get("url") or not data.get("name"):
         raise HTTPException(400, "name and url are required")
@@ -217,3 +165,60 @@ def recommend_sources(tenant_id: int, db: Session = Depends(get_db)):
     ids = get_ai_provider().recommend_sources(tenant.topic_profile, catalog_dicts)
     recommended = [c for c in catalog if c.id in ids]
     return {"recommended": [CatalogSourceRead.model_validate(c) for c in recommended]}
+
+
+# ── Parameterised routes last ─────────────────────────────────────────────────
+
+@router.get("/{catalog_id}", response_model=CatalogSourceRead)
+def get_catalog_source(catalog_id: int, db: Session = Depends(get_db)):
+    cs = db.get(CatalogSource, catalog_id)
+    if not cs:
+        raise HTTPException(404, "Catalog source not found")
+    return cs
+
+
+@router.put("/{catalog_id}", response_model=CatalogSourceRead)
+def update_catalog_source(catalog_id: int, data: CatalogSourceUpdate,
+                           db: Session = Depends(get_db)):
+    cs = db.get(CatalogSource, catalog_id)
+    if not cs:
+        raise HTTPException(404, "Catalog source not found")
+    for field, value in data.model_dump(exclude_none=True).items():
+        setattr(cs, field, value)
+    db.commit()
+    db.refresh(cs)
+    return cs
+
+
+@router.post("/{catalog_id}/add", response_model=SourceRead)
+def add_to_tenant(catalog_id: int, tenant_id: int, db: Session = Depends(get_db)):
+    cs = db.get(CatalogSource, catalog_id)
+    if not cs:
+        raise HTTPException(404, "Catalog source not found")
+    existing = (db.query(Source)
+                .filter_by(tenant_id=tenant_id, catalog_source_id=catalog_id)
+                .first())
+    if existing:
+        raise HTTPException(400, "This source is already in your feed")
+    source = Source(
+        tenant_id=tenant_id,
+        catalog_source_id=catalog_id,
+        name=cs.name,
+        url=cs.url,
+        type=cs.type,
+        css_selector=cs.css_selector,
+        is_active=True,
+    )
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    return source
+
+
+@router.get("/{catalog_id}/in-tenant/{tenant_id}")
+def is_in_tenant(catalog_id: int, tenant_id: int, db: Session = Depends(get_db)):
+    existing = (db.query(Source)
+                .filter_by(tenant_id=tenant_id, catalog_source_id=catalog_id)
+                .first())
+    return {"added": existing is not None,
+            "source_id": existing.id if existing else None}

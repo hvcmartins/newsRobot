@@ -8,7 +8,14 @@ const client = axios.create({
 client.interceptors.response.use(
   (r) => r,
   (err) => {
-    const msg = err.response?.data?.detail || err.message || 'Request failed'
+    const detail = err.response?.data?.detail
+    let msg: string
+    if (Array.isArray(detail)) {
+      // FastAPI validation errors: [{loc, msg, type}, ...]
+      msg = detail.map((d: { msg?: string }) => d.msg ?? JSON.stringify(d)).join(', ')
+    } else {
+      msg = detail || err.message || 'Request failed'
+    }
     return Promise.reject(new Error(String(msg)))
   }
 )
