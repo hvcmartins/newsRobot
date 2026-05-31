@@ -79,8 +79,8 @@ const PROVIDERS: ProviderDef[] = [
     keyLabel: 'Google AI API Key',
     keyPlaceholder: 'AIza...',
     keyDocsUrl: 'https://aistudio.google.com/app/apikey',
-    models: ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
-    defaultModel: 'gemini-2.0-flash',
+    models: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'],
+    defaultModel: 'gemini-2.5-flash',
   },
   {
     value: 'ollama',
