@@ -13,5 +13,6 @@ class AIConfig(Base):
     model = Column(String(100), nullable=True)
     base_url = Column(String(500), nullable=True)        # ollama custom URL
     local_model_id = Column(String(100), nullable=True)  # llamacpp selected model
+    cpu_limit_percent = Column(Integer, default=80, nullable=False)  # llamacpp thread cap
     updated_at = Column(DateTime, default=datetime.datetime.utcnow,
                         onupdate=datetime.datetime.utcnow)

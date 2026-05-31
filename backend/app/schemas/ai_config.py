@@ -9,6 +9,7 @@ class AIConfigUpdate(BaseModel):
     model: Optional[str] = None
     base_url: Optional[str] = None
     local_model_id: Optional[str] = None
+    cpu_limit_percent: int = 80          # llamacpp: % of CPU cores to use (25-100)
 
 
 class AIConfigRead(BaseModel):
@@ -18,3 +19,4 @@ class AIConfigRead(BaseModel):
     model: Optional[str]
     base_url: Optional[str]
     local_model_id: Optional[str]
+    cpu_limit_percent: int = 80

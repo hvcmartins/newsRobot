@@ -29,6 +29,7 @@ def _to_read(cfg: AIConfig) -> AIConfigRead:
         model=cfg.model,
         base_url=cfg.base_url,
         local_model_id=cfg.local_model_id,
+        cpu_limit_percent=cfg.cpu_limit_percent or 80,
     )
 
 
@@ -48,6 +49,7 @@ def update_ai_config(payload: AIConfigUpdate, db: Session = Depends(get_db)):
     cfg.base_url = payload.base_url.strip() if payload.base_url else None
     if payload.local_model_id is not None:
         cfg.local_model_id = payload.local_model_id or None
+    cfg.cpu_limit_percent = max(25, min(100, payload.cpu_limit_percent))
     db.commit()
     db.refresh(cfg)
     reset_provider()

@@ -80,9 +80,10 @@ def _build_provider(db=None) -> AIProvider:
                 "Go to AI Settings and download the model first."
             )
         p = model_path(mid)
+        cpu_pct = getattr(config, 'cpu_limit_percent', 80) or 80
         from .llamacpp_provider import LlamaCppProvider
-        logger.info("AI: llama.cpp (model=%s, path=%s)", mid, p)
-        return LlamaCppProvider(model_path=str(p))
+        logger.info("AI: llama.cpp (model=%s, cpu_limit=%d%%)", mid, cpu_pct)
+        return LlamaCppProvider(model_path=str(p), cpu_limit_percent=cpu_pct)
 
     if name == "ollama":
         from .ollama import OllamaProvider

@@ -13,19 +13,24 @@ _CATEGORIES = [
 
 
 class LlamaCppProvider(AIProvider):
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str, cpu_limit_percent: int = 80):
         self._model_path = model_path
+        self._cpu_limit_percent = max(25, min(100, cpu_limit_percent))
         self._llm = None  # lazy-loaded on first use
 
     def _get_llm(self):
         if self._llm is None:
             from llama_cpp import Llama
             import os
-            n_threads = os.cpu_count() or 4
-            logger.info("Loading llama.cpp model from %s (threads=%d)", self._model_path, n_threads)
+            total = os.cpu_count() or 4
+            n_threads = max(1, round(total * self._cpu_limit_percent / 100))
+            logger.info(
+                "Loading llama.cpp model from %s (threads=%d/%d, cpu_limit=%d%%)",
+                self._model_path, n_threads, total, self._cpu_limit_percent,
+            )
             self._llm = Llama(
                 model_path=self._model_path,
-                n_ctx=4096,   # enough room for prompt + full JSON response
+                n_ctx=4096,
                 n_threads=n_threads,
                 verbose=False,
             )
