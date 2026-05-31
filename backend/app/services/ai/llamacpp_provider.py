@@ -18,11 +18,13 @@ class LlamaCppProvider(AIProvider):
     def _get_llm(self):
         if self._llm is None:
             from llama_cpp import Llama
-            logger.info("Loading llama.cpp model from %s", self._model_path)
+            import os
+            n_threads = os.cpu_count() or 4
+            logger.info("Loading llama.cpp model from %s (threads=%d)", self._model_path, n_threads)
             self._llm = Llama(
                 model_path=self._model_path,
                 n_ctx=2048,
-                n_threads=-1,   # all available CPU threads
+                n_threads=n_threads,
                 verbose=False,
             )
         return self._llm

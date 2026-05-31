@@ -64,15 +64,24 @@ def _build_provider(db=None) -> AIProvider:
         return OpenAIProvider(api_key=key, model=model, base_url=base_url)
 
     if name == "llamacpp":
+        try:
+            import llama_cpp  # noqa: F401
+        except ImportError:
+            raise RuntimeError(
+                "llama-cpp-python is not installed in this container. "
+                "Rebuild the Docker image to include it."
+            )
         from .local_models import model_path, get_status
-        mid = config.model or "llama-3.2-3b"
+        mid = config.local_model_id or "llama-3.2-3b"
         status = get_status(mid)
         if status.get("status") != "ready":
-            logger.warning("llamacpp model '%s' not ready (status=%s) — NullProvider", mid, status.get("status"))
-            return NullProvider()
+            raise RuntimeError(
+                f"Model '{mid}' is not downloaded yet (status: {status.get('status')}). "
+                "Go to AI Settings and download the model first."
+            )
         p = model_path(mid)
         from .llamacpp_provider import LlamaCppProvider
-        logger.info("AI: llama.cpp (model=%s)", mid)
+        logger.info("AI: llama.cpp (model=%s, path=%s)", mid, p)
         return LlamaCppProvider(model_path=str(p))
 
     if name == "ollama":

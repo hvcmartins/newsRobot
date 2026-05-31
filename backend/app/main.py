@@ -1,3 +1,4 @@
+import datetime
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -6,6 +7,8 @@ import app.compat  # noqa: F401 — must run before feedparser is imported
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
+_BUILD_TIME = datetime.datetime.utcnow().isoformat()
 
 from app.config import settings
 from app.database import create_tables
@@ -37,6 +40,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "started_at": _BUILD_TIME}
 
 app.include_router(tenants.router,      prefix="/api/tenants",      tags=["tenants"])
 app.include_router(sources.router,      prefix="/api/sources",      tags=["sources"])
