@@ -7,6 +7,9 @@ engine = create_engine(
     settings.database_url,
     connect_args={"check_same_thread": False},
     echo=settings.debug,
+    pool_size=10,       # persistent connections (up from default 5)
+    max_overflow=20,    # burst headroom (up from default 10)
+    pool_timeout=60,    # wait up to 60s for a free connection (up from 30s)
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

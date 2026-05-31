@@ -2,7 +2,7 @@ import difflib
 import json
 import logging
 import datetime
-import threading
+from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -13,6 +13,10 @@ from .web_scraper import WebScraper
 from .base import ScrapedArticle
 
 logger = logging.getLogger(__name__)
+
+# Bounded pool: at most this many enrichment threads hold a DB connection at once.
+# Prevents pool exhaustion when a single source returns hundreds of articles.
+_enrich_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="enrich")
 
 
 def _keyword_relevance(article: ScrapedArticle, keywords: list[str]) -> float:
@@ -202,16 +206,12 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         logger.info("Done '%s': %d new, %d already seen",
                     source.name, new_count, len(articles) - new_count)
 
-        # Async AI enrichment — fire and forget
+        # Async AI enrichment — submit to bounded pool so DB connections
+        # stay within the pool limit regardless of article count.
         if new_article_ids:
             logger.info("Queuing AI enrichment for %d article(s)", len(new_article_ids))
         for article_id in new_article_ids:
-            t = threading.Thread(
-                target=_enrich_article,
-                args=(article_id, tenant.topic_profile),
-                daemon=True,
-            )
-            t.start()
+            _enrich_executor.submit(_enrich_article, article_id, tenant.topic_profile)
 
         source.last_scraped_at = datetime.datetime.utcnow()
         run.articles_new = new_count
