@@ -133,12 +133,18 @@ export default function TenantSettingsPage() {
             ✦ Generate Keywords from Profile
           </Button>
         </div>
+        <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '4px 0' }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ fontSize: 12, color: '#888' }}>
+            Saves all settings on this page (general, branding, schedule and profile).
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {saved && <span style={{ fontSize: 12, color: '#2e7d32' }}>✓ Saved</span>}
+            {saveError && <span style={{ fontSize: 12, color: '#e53935' }}>{saveError}</span>}
+            <Button loading={saveMut.isPending} onClick={() => saveMut.mutate()}>Save Settings</Button>
+          </div>
+        </div>
       </section>
-
-      {saveError && <p style={{ fontSize: 12, color: '#e53935' }}>{saveError}</p>}
-      {saved && <p style={{ fontSize: 13, color: '#2e7d32', background: '#e8f5e9', padding: '8px 12px', borderRadius: 6 }}>Settings saved!</p>}
-
-      <Button loading={saveMut.isPending} onClick={() => saveMut.mutate()}>Save Settings</Button>
 
       <section style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600 }}>Add New Company</h2>
