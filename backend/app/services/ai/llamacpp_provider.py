@@ -65,29 +65,42 @@ class LlamaCppProvider(AIProvider):
             logger.warning("llama.cpp JSON parse failed: %s", raw)
             raise ValueError(f"Invalid JSON from local model: {raw}") from exc
 
+    # Multiple-choice labels → (score, reason) — small models pick letters
+    # far more reliably than generating arbitrary floating-point numbers.
+    _RELEVANCE_CHOICES = {
+        'A': (0.90, "Directly relevant to the company's core business"),
+        'B': (0.70, "Useful industry or market context for the company"),
+        'C': (0.40, "Loosely related — tangential connection"),
+        'D': (0.10, "Not relevant to the company"),
+    }
+
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
-        # Truncate inputs — small models perform better with shorter prompts
-        profile_short = (topic_profile or "")[:300]
-        excerpt_short = (excerpt or "")[:200]
+        profile_short = (topic_profile or "")[:250]
+        excerpt_short = (excerpt or "")[:150]
         prompt = (
             f"Company profile: {profile_short}\n\n"
-            f"Article title: {title}\nArticle excerpt: {excerpt_short or '(none)'}\n\n"
-            "Score how relevant this article is to the company:\n"
-            "  1.0 = directly about the company's core business\n"
-            "  0.7 = clearly useful background news\n"
-            "  0.5 = tangentially related\n"
-            "  0.0 = completely unrelated\n\n"
-            'Return JSON only, e.g.: {"score": 0.85, "reason": "Covers EU energy policy directly affecting the company\'s market"}'
+            f"News article:\nTitle: {title[:150]}\n{excerpt_short}\n\n"
+            "How relevant is this article to the company? Choose ONE letter:\n"
+            "A - Essential: directly about their industry, products, or competitors\n"
+            "B - Useful: relevant market, regulatory, or technology news\n"
+            "C - Marginal: only loosely related\n"
+            "D - Irrelevant: unrelated topic\n\n"
+            "Reply with exactly one letter (A, B, C, or D):"
         )
-        data = self._ask_json(prompt)
-        score = float(data.get("score", 0.5))
-        reason = str(data.get("reason", ""))
-        # Discard copied example values from the prompt
-        if reason in ("one sentence", "..."):
-            reason = ""
-        if score == 0.5 and reason == "":
-            logger.warning("llama.cpp score_relevance returned default 0.5 — check model quality")
-        return RelevanceResult(score=score, reason=reason)
+        raw = self._ask(prompt, max_tokens=8).strip()
+        logger.debug("llama.cpp relevance raw: %r", raw[:30])
+
+        # Match the first A/B/C/D in the response
+        import re as _re
+        m = _re.search(r'\b([ABCD])\b', raw.upper())
+        if m:
+            letter = m.group(1)
+            score, reason = self._RELEVANCE_CHOICES[letter]
+            logger.info("llama.cpp relevance: %s → %.2f", letter, score)
+            return RelevanceResult(score=score, reason=reason)
+
+        logger.warning("llama.cpp: could not parse relevance letter from %r — defaulting 0.5", raw[:50])
+        return RelevanceResult(score=0.5, reason="")
 
     def summarize(self, title, excerpt) -> str:
         return self._ask(
