@@ -18,7 +18,8 @@ class LlamaCppProvider(AIProvider):
         self._model_path = model_path
         self._cpu_limit_percent = max(25, min(100, cpu_limit_percent))
         self._llm = None
-        self._load_lock = threading.Lock()  # prevents concurrent model loads (OOM)
+        self._load_lock = threading.Lock()   # prevents concurrent model loads (OOM)
+        self._infer_lock = threading.Lock()  # llama_cpp is not thread-safe for inference
 
     def _get_llm(self):
         # Double-checked locking: cheap check outside, safe load inside
@@ -43,11 +44,15 @@ class LlamaCppProvider(AIProvider):
 
     def _ask(self, prompt: str, max_tokens: int = 512) -> str:
         llm = self._get_llm()
-        resp = llm.create_chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-            temperature=0.1,
-        )
+        # Serialize all inference calls — llama_cpp's Llama object is not
+        # thread-safe; concurrent calls from the enrichment thread pool
+        # cause segfaults that crash the entire container.
+        with self._infer_lock:
+            resp = llm.create_chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+                temperature=0.1,
+            )
         return resp["choices"][0]["message"]["content"].strip()
 
     def _ask_json(self, prompt: str) -> dict:
