@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { aiConfigApi, type AIConfigUpdate } from '@/api/aiConfig'
+import React, { useState, useEffect, useRef } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { aiConfigApi, type AIConfigUpdate, type LocalModel } from '@/api/aiConfig'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 
@@ -85,7 +85,7 @@ const PROVIDERS: ProviderDef[] = [
   {
     value: 'ollama',
     label: 'Ollama (local)',
-    description: 'Run AI locally on your Unraid server — no API key needed',
+    description: 'Connect to a separate Ollama server — no API key needed',
     requiresKey: false,
     requiresUrl: true,
     keyLabel: '',
@@ -94,12 +94,36 @@ const PROVIDERS: ProviderDef[] = [
     models: [],
     defaultModel: 'llama3.2',
   },
+  {
+    value: 'llamacpp',
+    label: 'Local AI (built-in)',
+    description: 'Download & run models directly in this container — CPU only, no server needed',
+    requiresKey: false,
+    requiresUrl: false,
+    keyLabel: '',
+    keyPlaceholder: '',
+    keyDocsUrl: '',
+    models: [],
+    defaultModel: '',
+  },
 ]
 
 export default function AISettingsPage() {
+  const qc = useQueryClient()
+
   const { data: current, isLoading } = useQuery({
     queryKey: ['ai-config'],
     queryFn: aiConfigApi.get,
+  })
+
+  const { data: localModels, refetch: refetchModels } = useQuery({
+    queryKey: ['ai-local-models'],
+    queryFn: aiConfigApi.listLocalModels,
+    refetchInterval: (query) => {
+      const models = query.state.data
+      if (models?.some(m => m.status === 'downloading')) return 2000
+      return false
+    },
   })
 
   const [enabled, setEnabled] = useState(false)
@@ -107,6 +131,7 @@ export default function AISettingsPage() {
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
+  const [localModelId, setLocalModelId] = useState('')
   const [saved, setSaved] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
@@ -117,7 +142,8 @@ export default function AISettingsPage() {
     setProvider(current.provider)
     setModel(current.model ?? '')
     setBaseUrl(current.base_url ?? '')
-    setApiKey('')  // never pre-fill the key for security
+    setLocalModelId(current.local_model_id ?? '')
+    setApiKey('')
   }, [current])
 
   const def = PROVIDERS.find(p => p.value === provider) ?? PROVIDERS[0]
@@ -136,15 +162,29 @@ export default function AISettingsPage() {
         provider,
         model: model || def.defaultModel || null,
         base_url: baseUrl || null,
+        local_model_id: provider === 'llamacpp' ? (localModelId || null) : null,
       }
-      // Only send api_key if the user typed something
       if (apiKey.trim()) payload.api_key = apiKey.trim()
       return aiConfigApi.update(payload)
     },
     onSuccess: () => {
       setSaved(true)
       setApiKey('')
+      qc.invalidateQueries({ queryKey: ['ai-config'] })
       setTimeout(() => setSaved(false), 3000)
+    },
+  })
+
+  const downloadMut = useMutation({
+    mutationFn: (modelId: string) => aiConfigApi.downloadLocalModel(modelId),
+    onSuccess: () => refetchModels(),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (modelId: string) => aiConfigApi.deleteLocalModel(modelId),
+    onSuccess: () => {
+      refetchModels()
+      if (localModelId === deleteMut.variables) setLocalModelId('')
     },
   })
 
@@ -272,6 +312,16 @@ export default function AISettingsPage() {
             </div>
           )}
 
+          {provider === 'llamacpp' && (
+            <LocalModelPicker
+              models={localModels ?? []}
+              selectedId={localModelId}
+              onSelect={setLocalModelId}
+              onDownload={id => downloadMut.mutate(id)}
+              onDelete={id => deleteMut.mutate(id)}
+            />
+          )}
+
           <div>
             <label style={labelStyle}>Model</label>
             {def.models.length > 0 ? (
@@ -334,6 +384,95 @@ export default function AISettingsPage() {
       <Button loading={saveMut.isPending} onClick={() => saveMut.mutate()}>
         Save AI Settings
       </Button>
+    </div>
+  )
+}
+
+// ── Local model picker ────────────────────────────────────────────────────────
+
+function LocalModelPicker({ models, selectedId, onSelect, onDownload, onDelete }: {
+  models: LocalModel[]
+  selectedId: string
+  onSelect: (id: string) => void
+  onDownload: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>
+        Choose a model to download and use
+      </label>
+      <p style={{ fontSize: 11, color: '#888', marginTop: -6 }}>
+        Models are stored in <code style={{ background: '#f5f5f5', padding: '1px 4px', borderRadius: 3 }}>/data/models/</code> and survive container restarts.
+      </p>
+      {models.map(m => {
+        const isSelected = selectedId === m.id
+        const isReady = m.status === 'ready'
+        const isDownloading = m.status === 'downloading'
+        return (
+          <div key={m.id} style={{
+            border: isSelected ? '2px solid var(--brand-color)' : '1px solid #e5e7eb',
+            borderRadius: 8, padding: '12px 14px',
+            background: isSelected ? 'var(--brand-color-light)' : '#fafafa',
+            cursor: isReady ? 'pointer' : 'default',
+          }} onClick={() => isReady && onSelect(m.id)}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                  {isReady && (
+                    <input type="radio" readOnly checked={isSelected}
+                      style={{ accentColor: 'var(--brand-color)' }} />
+                  )}
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{m.name}</span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10,
+                    background: m.tag === 'Recommended' ? '#e8f5e9' : m.tag === 'Lite' ? '#e3f2fd' : '#fff3e0',
+                    color: m.tag === 'Recommended' ? '#2e7d32' : m.tag === 'Lite' ? '#1565c0' : '#e65100',
+                  }}>{m.tag}</span>
+                </div>
+                <div style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>{m.description}</div>
+                <div style={{ fontSize: 11, color: '#999' }}>
+                  {m.size_gb} GB download · {m.ram_gb} GB RAM needed
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                {isReady ? (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <span style={{ fontSize: 11, color: '#2e7d32', fontWeight: 600 }}>✓ Ready</span>
+                    <button onClick={e => { e.stopPropagation(); onDelete(m.id) }}
+                      style={{ fontSize: 10, color: '#e53935', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      Remove
+                    </button>
+                  </div>
+                ) : isDownloading ? (
+                  <span style={{ fontSize: 11, color: '#1565c0' }}>Downloading…</span>
+                ) : (
+                  <button onClick={e => { e.stopPropagation(); onDownload(m.id) }}
+                    style={{
+                      fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                      background: 'var(--brand-color)', color: '#fff', border: 'none', cursor: 'pointer',
+                    }}>
+                    Download
+                  </button>
+                )}
+                {m.status === 'error' && (
+                  <span style={{ fontSize: 10, color: '#e53935' }}>{m.error}</span>
+                )}
+              </div>
+            </div>
+            {isDownloading && (
+              <div style={{ marginTop: 8, background: '#e0e0e0', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 4,
+                  background: 'var(--brand-color)',
+                  width: `${m.progress}%`,
+                  transition: 'width 0.5s ease',
+                }} />
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

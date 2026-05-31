@@ -11,10 +11,14 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libffi-dev \
+    gcc g++ cmake libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .
+# Install llama-cpp-python separately with --prefer-binary to use pre-built wheels
+# where available (avoids long compile on supported platforms)
+RUN pip install --no-cache-dir llama-cpp-python==0.3.4 --prefer-binary || \
+    pip install --no-cache-dir llama-cpp-python==0.3.4
 RUN pip install --no-cache-dir -r requirements.txt; \
     # sgmllib3k fails to build on Python 3.11 due to distutils changes; \
     # install a minimal stub that satisfies feedparser's import \

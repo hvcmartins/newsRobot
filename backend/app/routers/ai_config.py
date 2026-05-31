@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -28,6 +28,7 @@ def _to_read(cfg: AIConfig) -> AIConfigRead:
         api_key_set=bool(cfg.api_key),
         model=cfg.model,
         base_url=cfg.base_url,
+        local_model_id=cfg.local_model_id,
     )
 
 
@@ -41,11 +42,12 @@ def update_ai_config(payload: AIConfigUpdate, db: Session = Depends(get_db)):
     cfg = _get_or_create(db)
     cfg.is_enabled = payload.is_enabled
     cfg.provider = payload.provider
-    # api_key=None means "don't touch it"; api_key="" means "clear it"
     if payload.api_key is not None:
         cfg.api_key = payload.api_key.strip() or None
     cfg.model = payload.model.strip() if payload.model else None
     cfg.base_url = payload.base_url.strip() if payload.base_url else None
+    if payload.local_model_id is not None:
+        cfg.local_model_id = payload.local_model_id or None
     db.commit()
     db.refresh(cfg)
     reset_provider()
@@ -59,10 +61,48 @@ def test_ai_config(db: Session = Depends(get_db)):
         provider = get_ai_provider(db)
         result = provider.summarize(
             "Artificial Intelligence Transforms News Industry",
-            "AI tools are increasingly being used in newsrooms to automate routine "
-            "tasks, summarize articles, and surface relevant stories for journalists.",
+            "AI tools are being used in newsrooms to automate tasks and surface relevant stories.",
         )
         return {"ok": True, "response": result}
     except Exception as exc:
         logger.exception("AI test failed")
         return {"ok": False, "error": str(exc)}
+
+
+# ── Local model endpoints ─────────────────────────────────────────────────────
+
+@router.get("/local-models")
+def list_local_models():
+    from app.services.ai.local_models import get_all_statuses
+    return get_all_statuses()
+
+
+@router.get("/local-models/{model_id}")
+def get_local_model(model_id: str):
+    from app.services.ai.local_models import get_status
+    s = get_status(model_id)
+    if s.get("status") == "unknown":
+        raise HTTPException(status_code=404, detail="Unknown model")
+    return s
+
+
+@router.post("/local-models/{model_id}/download")
+def download_local_model(model_id: str):
+    from app.services.ai.local_models import start_download, get_status, CATALOG
+    if not any(m["id"] == model_id for m in CATALOG):
+        raise HTTPException(status_code=404, detail="Unknown model")
+    status = get_status(model_id)
+    if status.get("status") == "ready":
+        return {"message": "Already downloaded"}
+    start_download(model_id)
+    return {"message": "Download started"}
+
+
+@router.delete("/local-models/{model_id}")
+def delete_local_model(model_id: str):
+    from app.services.ai.local_models import delete_model, CATALOG
+    if not any(m["id"] == model_id for m in CATALOG):
+        raise HTTPException(status_code=404, detail="Unknown model")
+    delete_model(model_id)
+    reset_provider()
+    return {"message": "Deleted"}

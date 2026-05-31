@@ -11,6 +11,7 @@ class AIConfig(Base):
     provider = Column(String(50), default="none", nullable=False)
     api_key = Column(String(500), nullable=True)
     model = Column(String(100), nullable=True)
-    base_url = Column(String(500), nullable=True)  # ollama custom URL
+    base_url = Column(String(500), nullable=True)        # ollama custom URL
+    local_model_id = Column(String(100), nullable=True)  # llamacpp selected model
     updated_at = Column(DateTime, default=datetime.datetime.utcnow,
                         onupdate=datetime.datetime.utcnow)
