@@ -8,10 +8,32 @@ interface Props {
   onMarkRead?: (id: number) => void
 }
 
+function relevanceStyle(score: number, aiEnriched: boolean): {
+  borderColor: string
+  badgeBg: string
+  badgeColor: string
+  label: string
+} | null {
+  if (!aiEnriched || score <= 0) return null
+  if (score >= 0.7) return {
+    borderColor: '#4caf50',
+    badgeBg: '#e8f5e9',
+    badgeColor: '#2e7d32',
+    label: `${Math.round(score * 100)}%`,
+  }
+  // 0.5–0.7 orange
+  return {
+    borderColor: '#ff9800',
+    badgeBg: '#fff3e0',
+    badgeColor: '#e65100',
+    label: `${Math.round(score * 100)}%`,
+  }
+}
+
 export default function ArticleCard({ article, onMarkRead }: Props) {
   const displayText = article.summary || article.excerpt
   const date = article.published_at || article.scraped_at
-  const scoreColor = article.relevance_score >= 0.7 ? '#2e7d32' : article.relevance_score >= 0.4 ? '#f57f17' : '#999'
+  const rel = relevanceStyle(article.relevance_score, article.ai_enriched)
 
   return (
     <article
@@ -24,6 +46,7 @@ export default function ArticleCard({ article, onMarkRead }: Props) {
         transition: 'box-shadow 0.15s',
         display: 'flex',
         flexDirection: 'column',
+        borderLeft: rel ? `3px solid ${rel.borderColor}` : '3px solid transparent',
       }}
     >
       {article.image_url && (
@@ -50,9 +73,14 @@ export default function ArticleCard({ article, onMarkRead }: Props) {
           {article.category && !['Uncategorized', 'Other'].includes(article.category) && (
             <Badge variant="neutral">{article.category}</Badge>
           )}
-          {article.relevance_score > 0 && (
-            <span style={{ fontSize: 10, color: scoreColor, marginLeft: 'auto', fontWeight: 600 }}>
-              {Math.round(article.relevance_score * 100)}%
+          {rel && (
+            <span style={{
+              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+              marginLeft: 'auto', flexShrink: 0,
+              background: rel.badgeBg,
+              color: rel.badgeColor,
+            }}>
+              {rel.label}
             </span>
           )}
         </div>
@@ -77,7 +105,7 @@ export default function ArticleCard({ article, onMarkRead }: Props) {
           </p>
         )}
 
-        {article.relevance_reason && (
+        {article.relevance_reason && article.ai_enriched && (
           <p style={{ fontSize: 11, color: '#999', fontStyle: 'italic', borderLeft: '2px solid #eee', paddingLeft: 8 }}>
             {article.relevance_reason}
           </p>

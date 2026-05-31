@@ -80,16 +80,27 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
         except Exception as exc:
             ai_log.warning("Summary failed for '%s': %s", title_short, exc)
 
-        # Relevance (uses topic_profile if available)
+        # Relevance — requires a topic profile to be meaningful
         if topic_profile:
             try:
                 result = ai.score_relevance(article.title, article.excerpt or "",
                                             topic_profile)
-                article.relevance_score = result.score
-                article.relevance_reason = result.reason
                 ai_log.info("Relevance %.2f — '%s'%s",
                             result.score, title_short,
                             f" ({result.reason})" if result.reason else "")
+
+                if result.score < 0.5:
+                    # Article is not relevant to this tenant's profile — discard it.
+                    # Use a bulk-delete query to avoid session-state conflicts from
+                    # the pending summary change above.
+                    db.query(Article).filter(Article.id == article_id).delete()
+                    db.commit()
+                    ai_log.info("Deleted low-relevance article (%.2f): '%s'",
+                                result.score, title_short)
+                    return
+
+                article.relevance_score = result.score
+                article.relevance_reason = result.reason
             except Exception as exc:
                 ai_log.warning("Relevance scoring failed for '%s': %s", title_short, exc)
 
