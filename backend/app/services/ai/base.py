@@ -32,6 +32,26 @@ Example element:
 "reason":"Covers financial markets relevant to the company"}}
 """
 
+# Shorter prompt for local (constrained-context) models — fewer items,
+# explicit curly-brace rule, and a worked example.
+DISCOVER_PROMPT_SHORT = """\
+List 6 RSS news feed sources for this company profile:
+{topic_profile}
+
+Rules:
+- Use CURLY BRACES {{}} for each object, NOT square brackets [].
+- Output ONLY the JSON array, no other text.
+- Required keys: name, url, type, category, description, reason
+- type must be "rss" or "scrape"
+- category must be one of: Technology, Finance, Business, Politics, Science, Health, Sports, World News, Environment, Other
+
+Example (follow this format exactly):
+[
+{{"name":"BBC News","url":"https://feeds.bbci.co.uk/news/rss.xml","type":"rss","category":"World News","description":"Global news from the BBC","reason":"Broad international coverage"}},
+{{"name":"Reuters Business","url":"https://feeds.reuters.com/reuters/businessNews","type":"rss","category":"Finance","description":"Business and finance news","reason":"Covers markets and deals"}}
+]
+"""
+
 
 def extract_sources_from_text(raw: str) -> list[dict]:
     """Last-resort extractor: pull sources from mangled or truncated output.
@@ -57,7 +77,6 @@ def extract_sources_from_text(raw: str) -> list[dict]:
         url = m.group(1).strip()
         if not url or url in seen:
             continue
-        # Search for sibling fields within a window around this URL
         ws = max(0, m.start() - 300)
         we = min(len(raw), m.end() + 400)
         ctx = raw[ws:we]
@@ -89,6 +108,32 @@ def extract_sources_from_text(raw: str) -> list[dict]:
     return result
 
 
+def normalise_discovered(raw: list) -> list[dict]:
+    """Coerce AI output to a clean list of source dicts."""
+    _VALID_TYPES = {"rss", "scrape"}
+    _VALID_CATS = {
+        "Technology", "Finance", "Business", "Politics", "Science",
+        "Health", "Sports", "World News", "Environment", "Other",
+    }
+    result = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url", "")).strip()
+        name = str(item.get("name", "")).strip()
+        if not url or not name or not url.startswith("http"):
+            continue
+        result.append({
+            "name": name,
+            "url": url,
+            "type": item.get("type", "rss") if item.get("type") in _VALID_TYPES else "rss",
+            "category": item.get("category", "Other") if item.get("category") in _VALID_CATS else "Other",
+            "description": str(item.get("description", "")).strip(),
+            "reason": str(item.get("reason", "")).strip(),
+        })
+    return result
+
+
 def repair_json_array(raw: str) -> str:
     """Fix common small-model JSON mistakes before parsing.
 
@@ -98,7 +143,6 @@ def repair_json_array(raw: str) -> str:
     - Missing outer array: bare {...}, {...} items wrapped in [...]
     """
     result: list[str] = []
-    # stack tracks what each opener *should* be based on what follows it
     stack: list[str] = []  # 'obj' or 'arr'
     in_string = False
     i = 0
@@ -130,11 +174,10 @@ def repair_json_array(raw: str) -> str:
                 j += 1
             is_obj = False
             if j < n and raw[j] == '"':
-                # Find end of key string
                 k = j + 1
                 while k < n and not (raw[k] == '"' and raw[k - 1] != '\\'):
                     k += 1
-                k += 1  # past closing quote
+                k += 1
                 while k < n and raw[k] in ' \t\n\r':
                     k += 1
                 if k < n and raw[k] == ':':
@@ -145,7 +188,6 @@ def repair_json_array(raw: str) -> str:
             continue
 
         if c in ']}':
-            # Close the most recent container with the correct bracket
             kind = stack.pop() if stack else 'arr'
             result.append('}' if kind == 'obj' else ']')
             i += 1
@@ -156,7 +198,6 @@ def repair_json_array(raw: str) -> str:
 
     joined = ''.join(result).strip()
 
-    # If no outer array wrapper, collect top-level {...} objects and wrap
     if not joined.startswith('['):
         objs: list[str] = []
         depth = 0
@@ -174,53 +215,8 @@ def repair_json_array(raw: str) -> str:
         if objs:
             joined = '[' + ','.join(objs) + ']'
 
-    # Remove trailing commas before closing bracket
     joined = re.sub(r',(\s*\])', r'\1', joined)
     return joined
-
-
-# Shorter prompt for local (constrained-context) models — fewer fields,
-# fewer items, explicit bracket instruction, and a worked example.
-DISCOVER_PROMPT_SHORT = """\
-List 6 RSS news feed sources for this company profile:
-{topic_profile}
-
-Rules:
-- Use CURLY BRACES {{}} for each object, NOT square brackets [].
-- Output ONLY the JSON array, no other text.
-- Required keys: name, url, type, category, description, reason
-- type must be "rss" or "scrape"
-- category must be one of: Technology, Finance, Business, Politics, Science, Health, Sports, World News, Environment, Other
-
-Example (follow this format exactly):
-[
-{{"name":"BBC News","url":"https://feeds.bbci.co.uk/news/rss.xml","type":"rss","category":"World News","description":"Global news from the BBC","reason":"Broad international coverage"}},
-{{"name":"Reuters Business","url":"https://feeds.reuters.com/reuters/businessNews","type":"rss","category":"Finance","description":"Business and finance news","reason":"Covers markets and deals"}}
-]
-"""
-    """Coerce AI output to a clean list of source dicts."""
-    _VALID_TYPES = {"rss", "scrape"}
-    _VALID_CATS = {
-        "Technology", "Finance", "Business", "Politics", "Science",
-        "Health", "Sports", "World News", "Environment", "Other",
-    }
-    result = []
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        url = str(item.get("url", "")).strip()
-        name = str(item.get("name", "")).strip()
-        if not url or not name or not url.startswith("http"):
-            continue
-        result.append({
-            "name": name,
-            "url": url,
-            "type": item.get("type", "rss") if item.get("type") in _VALID_TYPES else "rss",
-            "category": item.get("category", "Other") if item.get("category") in _VALID_CATS else "Other",
-            "description": str(item.get("description", "")).strip(),
-            "reason": str(item.get("reason", "")).strip(),
-        })
-    return result
 
 
 @dataclass
