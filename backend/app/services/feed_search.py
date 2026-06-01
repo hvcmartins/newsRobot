@@ -87,15 +87,21 @@ def _ai_search_queries(profile: str) -> list[str] | None:
 
         prompt = (
             "You are building search queries to find RSS news feeds.\n"
-            "The profile below has multiple topic sections. Generate ONE short search query "
-            "per section (2-4 words each), covering as many sections as possible (up to 8 queries).\n\n"
+            "The profile below has multiple topic sections. Generate ONE query per section "
+            "(up to 8 total), using the BROADEST term that covers the whole section — "
+            "not a narrow sub-topic from one bullet point.\n\n"
             "Rules:\n"
-            "- Each query must be specific: use organisation names, country names, or exact topics\n"
-            "- Do NOT include the words 'news', 'RSS', or 'feed' — they will be added automatically\n"
-            "- Do NOT use generic terms like 'information', 'coverage', 'embassy', 'updates'\n"
-            "- Prefer internationally recognised names (e.g. 'Timor-Leste', 'ASEAN', 'CPLP', 'UNESCO')\n\n"
-            f"Profile:\n{profile[:1200]}\n\n"
-            'Return JSON only: {"queries": ["Timor-Leste politics", "ASEAN summits", "EU ASEAN policy", "OACPS ACP", "CPLP lusophone", "SIDS climate finance", "UNESCO cultural heritage", "Brussels diplomacy"]}'
+            "- Use the section TITLE or main subject as the query, not individual bullet points\n"
+            "- 2-4 words per query\n"
+            "- Do NOT include the words 'news', 'RSS', or 'feed' — added automatically\n"
+            "- Do NOT use generic terms: 'information', 'coverage', 'embassy', 'updates', 'developments'\n"
+            "- Prefer well-known names: country names, organisation acronyms (ASEAN, CPLP, UNESCO, OACPS)\n\n"
+            "Example — for a section titled '🇧🇪 Belgium & EU Institutional News' covering "
+            "EU Parliament, Council, Commission, Belgium foreign policy: "
+            "use 'European Union institutional' or 'Belgium EU foreign policy', "
+            "NOT 'EU ASEAN policy' (that is just one bullet point).\n\n"
+            f"Profile:\n{profile[:1400]}\n\n"
+            'Return JSON only: {"queries": ["Timor-Leste politics", "ASEAN regional affairs", "European Union institutional", "OACPS ACP", "CPLP lusophone", "SIDS climate finance", "UNESCO", "Brussels diplomacy"]}'
         )
         if hasattr(ai, '_ask_json'):
             data = ai._ask_json(prompt)
