@@ -18,34 +18,56 @@ _SKIP_DOMAINS = {
 }
 
 
-def _load_google_creds() -> tuple[str, str] | None:
-    """Return (api_key, cx) from saved AI config, or None if not configured."""
+def _load_search_creds() -> tuple[str, dict] | None:
+    """Return (provider, kwargs) for the best available search backend, or None."""
     try:
         from app.database import SessionLocal
         from app.models.ai_config import AIConfig
         db = SessionLocal()
         try:
             cfg = db.query(AIConfig).first()
-            if cfg and cfg.google_search_api_key and cfg.google_search_cx:
-                return cfg.google_search_api_key, cfg.google_search_cx
+            if cfg:
+                if cfg.serper_api_key:
+                    return "serper", {"api_key": cfg.serper_api_key}
+                if cfg.google_search_api_key and cfg.google_search_cx:
+                    return "google", {"api_key": cfg.google_search_api_key,
+                                      "cx": cfg.google_search_cx}
         finally:
             db.close()
     except Exception as exc:
-        logger.debug("Could not load Google Search creds: %s", exc)
+        logger.debug("Could not load search creds: %s", exc)
     return None
 
 
+def _serper_search(query: str, api_key: str) -> list[str]:
+    """Google Search results via Serper.dev."""
+    resp = httpx.post(
+        "https://google.serper.dev/search",
+        headers={"X-API-KEY": api_key, "Content-Type": "application/json"},
+        json={"q": query, "num": 10},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    urls: list[str] = []
+    for item in resp.json().get("organic", []):
+        link = item.get("link", "")
+        if link.startswith("http"):
+            netloc = urlparse(link).netloc.replace("www.", "")
+            if netloc not in _SKIP_DOMAINS:
+                urls.append(link)
+    return urls
+
+
 def _google_search(query: str, api_key: str, cx: str) -> list[str]:
-    """Return page URLs from Google Custom Search JSON API."""
+    """Google Custom Search JSON API (legacy — requires existing PSE engine)."""
     resp = httpx.get(
         "https://www.googleapis.com/customsearch/v1",
         params={"key": api_key, "cx": cx, "q": query, "num": 10},
         timeout=10,
     )
     resp.raise_for_status()
-    items = resp.json().get("items", [])
     urls: list[str] = []
-    for item in items:
+    for item in resp.json().get("items", []):
         link = item.get("link", "")
         if link.startswith("http"):
             netloc = urlparse(link).netloc.replace("www.", "")
@@ -57,23 +79,25 @@ def _google_search(query: str, api_key: str, cx: str) -> list[str]:
 def web_search_feeds(topic_profile: str, max_results: int = 8) -> list[dict]:
     """Return RSS feeds found via web search for the topic profile.
 
-    Uses Google Custom Search API if configured, otherwise falls back to
-    DuckDuckGo. Returns an empty list on any failure — callers treat this
-    as a best-effort augmentation.
+    Priority: Serper.dev → Google Custom Search → DuckDuckGo.
+    Returns empty list on failure — callers treat this as best-effort.
     """
-    google_creds = _load_google_creds()
-    if google_creds:
-        logger.info("Source discovery: using Google Custom Search")
+    creds = _load_search_creds()
+    if creds:
+        provider, kwargs = creds
+        logger.info("Source discovery: using %s", provider)
     else:
-        logger.info("Source discovery: using DuckDuckGo (configure Google Search in AI Settings for better results)")
+        logger.info("Source discovery: using DuckDuckGo (add a Serper.dev key in AI Settings for better results)")
 
     queries = _build_queries(topic_profile)
     page_urls: set[str] = set()
 
     for q in queries[:4]:
         try:
-            if google_creds:
-                hits = _google_search(f"{q} news RSS feed", *google_creds)
+            if creds and provider == "serper":
+                hits = _serper_search(f"{q} news RSS feed", **kwargs)
+            elif creds and provider == "google":
+                hits = _google_search(f"{q} news RSS feed", **kwargs)
             else:
                 hits = _ddg_search(f"{q} news RSS feed")
             page_urls.update(hits[:6])

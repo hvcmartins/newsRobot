@@ -30,6 +30,7 @@ def _to_read(cfg: AIConfig) -> AIConfigRead:
         base_url=cfg.base_url,
         local_model_id=cfg.local_model_id,
         cpu_limit_percent=cfg.cpu_limit_percent or 80,
+        serper_api_key_set=bool(cfg.serper_api_key),
         google_search_api_key_set=bool(cfg.google_search_api_key),
         google_search_cx=cfg.google_search_cx,
     )
@@ -52,6 +53,8 @@ def update_ai_config(payload: AIConfigUpdate, db: Session = Depends(get_db)):
     if payload.local_model_id is not None:
         cfg.local_model_id = payload.local_model_id or None
     cfg.cpu_limit_percent = max(25, min(100, payload.cpu_limit_percent))
+    if payload.serper_api_key is not None:
+        cfg.serper_api_key = payload.serper_api_key.strip() or None
     if payload.google_search_api_key is not None:
         cfg.google_search_api_key = payload.google_search_api_key.strip() or None
     if payload.google_search_cx is not None:

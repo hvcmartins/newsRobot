@@ -133,6 +133,7 @@ export default function AISettingsPage() {
   const [baseUrl, setBaseUrl] = useState('')
   const [localModelId, setLocalModelId] = useState('')
   const [cpuLimit, setCpuLimit] = useState(80)
+  const [serperKey, setSerperKey] = useState('')
   const [googleKey, setGoogleKey] = useState('')
   const [googleCx, setGoogleCx] = useState('')
   const [saved, setSaved] = useState(false)
@@ -149,6 +150,7 @@ export default function AISettingsPage() {
     setCpuLimit(current.cpu_limit_percent ?? 80)
     setGoogleCx(current.google_search_cx ?? '')
     setApiKey('')
+    setSerperKey('')
     setGoogleKey('')
   }, [current])
 
@@ -173,6 +175,7 @@ export default function AISettingsPage() {
         google_search_cx: googleCx.trim() || null,
       }
       if (apiKey.trim()) payload.api_key = apiKey.trim()
+      if (serperKey.trim()) payload.serper_api_key = serperKey.trim()
       if (googleKey.trim()) payload.google_search_api_key = googleKey.trim()
       return aiConfigApi.update(payload)
     },
@@ -380,35 +383,47 @@ export default function AISettingsPage() {
         </section>
       )}
 
-      {/* Google Search */}
+      {/* Web Search for Source Discovery */}
       <section style={card}>
-        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Google Search for Source Discovery</h2>
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Web Search for Source Discovery</h2>
         <p style={{ fontSize: 12, color: '#888', marginBottom: 14, lineHeight: 1.5 }}>
-          When discovering sources, the AI suggests feeds from memory — but URLs are often invented.
-          Connecting Google Search finds <em>real, live</em> feeds on the web.
-          Free tier: 100 searches/day.{' '}
-          <a href="https://programmablesearchengine.google.com/" target="_blank" rel="noreferrer" style={{ color: '#1677ff' }}>
-            Create a Search Engine
-          </a>{' '}(set to search the entire web), then get an API key from{' '}
-          <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" style={{ color: '#1677ff' }}>
-            Google Cloud Console
-          </a>{' '}(enable "Custom Search API").
+          When discovering sources the AI suggests feeds from memory — URLs are often invented.
+          A web search API finds <em>real, live</em> feeds instead.
+          Without a key, DuckDuckGo is used as a free fallback.
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <label style={labelStyle}>
-              API Key{current?.google_search_api_key_set && <span style={{ color: '#4caf50', marginLeft: 6 }}>✓ set</span>}
-            </label>
-            <Input label="" value={googleKey} onChange={e => setGoogleKey(e.target.value)}
+
+        {/* Serper — recommended */}
+        <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 8, padding: '12px 14px', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>Serper.dev</span>
+            <span style={{ fontSize: 10, background: '#4caf50', color: '#fff', borderRadius: 10, padding: '1px 8px', fontWeight: 700 }}>RECOMMENDED</span>
+            {current?.serper_api_key_set && <span style={{ fontSize: 11, color: '#4caf50' }}>✓ configured</span>}
+          </div>
+          <p style={{ fontSize: 12, color: '#555', marginBottom: 8, lineHeight: 1.4 }}>
+            Google Search results via a simple API. No Programmable Search Engine needed — just one key.{' '}
+            2,500 free queries/month.{' '}
+            <a href="https://serper.dev" target="_blank" rel="noreferrer" style={{ color: '#1677ff' }}>Sign up at serper.dev</a>
+            {' '}→ copy your API key.
+          </p>
+          <Input label="" value={serperKey} onChange={e => setSerperKey(e.target.value)}
+            placeholder={current?.serper_api_key_set ? '••••••••  (leave blank to keep)' : 'Serper.dev API key'}
+            type="password" />
+        </div>
+
+        {/* Google Custom Search — legacy */}
+        <details style={{ fontSize: 12 }}>
+          <summary style={{ cursor: 'pointer', color: '#888', marginBottom: 8 }}>
+            Google Custom Search (legacy — only works with engines created before Jan 2025)
+            {current?.google_search_api_key_set && <span style={{ color: '#4caf50', marginLeft: 6 }}>✓ set</span>}
+          </summary>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+            <Input label="Google API Key" value={googleKey} onChange={e => setGoogleKey(e.target.value)}
               placeholder={current?.google_search_api_key_set ? '••••••••  (leave blank to keep)' : 'AIza...'}
               type="password" />
+            <Input label="Search Engine ID (cx)" value={googleCx} onChange={e => setGoogleCx(e.target.value)}
+              placeholder={current?.google_search_cx ?? 'e.g. 123456789:xyz'} />
           </div>
-          <div>
-            <label style={labelStyle}>Custom Search Engine ID (cx)</label>
-            <Input label="" value={googleCx} onChange={e => setGoogleCx(e.target.value)}
-              placeholder="e.g. 123456789abcdefgh:xyz" />
-          </div>
-        </div>
+        </details>
       </section>
 
       {/* Test */}
