@@ -18,21 +18,67 @@ _SKIP_DOMAINS = {
 }
 
 
-def web_search_feeds(topic_profile: str, max_results: int = 8) -> list[dict]:
-    """Return RSS feeds found via DuckDuckGo search for the topic profile.
+def _load_google_creds() -> tuple[str, str] | None:
+    """Return (api_key, cx) from saved AI config, or None if not configured."""
+    try:
+        from app.database import SessionLocal
+        from app.models.ai_config import AIConfig
+        db = SessionLocal()
+        try:
+            cfg = db.query(AIConfig).first()
+            if cfg and cfg.google_search_api_key and cfg.google_search_cx:
+                return cfg.google_search_api_key, cfg.google_search_cx
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.debug("Could not load Google Search creds: %s", exc)
+    return None
 
-    Falls back to an empty list on any network/parse failure — caller must
-    treat this as a best-effort augmentation, not a required step.
+
+def _google_search(query: str, api_key: str, cx: str) -> list[str]:
+    """Return page URLs from Google Custom Search JSON API."""
+    resp = httpx.get(
+        "https://www.googleapis.com/customsearch/v1",
+        params={"key": api_key, "cx": cx, "q": query, "num": 10},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    items = resp.json().get("items", [])
+    urls: list[str] = []
+    for item in items:
+        link = item.get("link", "")
+        if link.startswith("http"):
+            netloc = urlparse(link).netloc.replace("www.", "")
+            if netloc not in _SKIP_DOMAINS:
+                urls.append(link)
+    return urls
+
+
+def web_search_feeds(topic_profile: str, max_results: int = 8) -> list[dict]:
+    """Return RSS feeds found via web search for the topic profile.
+
+    Uses Google Custom Search API if configured, otherwise falls back to
+    DuckDuckGo. Returns an empty list on any failure — callers treat this
+    as a best-effort augmentation.
     """
+    google_creds = _load_google_creds()
+    if google_creds:
+        logger.info("Source discovery: using Google Custom Search")
+    else:
+        logger.info("Source discovery: using DuckDuckGo (configure Google Search in AI Settings for better results)")
+
     queries = _build_queries(topic_profile)
     page_urls: set[str] = set()
 
     for q in queries[:4]:
         try:
-            hits = _ddg_search(f"{q} news RSS feed")
+            if google_creds:
+                hits = _google_search(f"{q} news RSS feed", *google_creds)
+            else:
+                hits = _ddg_search(f"{q} news RSS feed")
             page_urls.update(hits[:6])
         except Exception as exc:
-            logger.debug("DDG search failed for %r: %s", q, exc)
+            logger.debug("Search failed for %r: %s", q, exc)
 
     if not page_urls:
         return []

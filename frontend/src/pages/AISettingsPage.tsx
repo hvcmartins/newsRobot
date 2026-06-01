@@ -133,6 +133,8 @@ export default function AISettingsPage() {
   const [baseUrl, setBaseUrl] = useState('')
   const [localModelId, setLocalModelId] = useState('')
   const [cpuLimit, setCpuLimit] = useState(80)
+  const [googleKey, setGoogleKey] = useState('')
+  const [googleCx, setGoogleCx] = useState('')
   const [saved, setSaved] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
@@ -145,7 +147,9 @@ export default function AISettingsPage() {
     setBaseUrl(current.base_url ?? '')
     setLocalModelId(current.local_model_id ?? '')
     setCpuLimit(current.cpu_limit_percent ?? 80)
+    setGoogleCx(current.google_search_cx ?? '')
     setApiKey('')
+    setGoogleKey('')
   }, [current])
 
   const def = PROVIDERS.find(p => p.value === provider) ?? PROVIDERS[0]
@@ -166,8 +170,10 @@ export default function AISettingsPage() {
         base_url: baseUrl || null,
         local_model_id: provider === 'llamacpp' ? (localModelId || null) : null,
         cpu_limit_percent: provider === 'llamacpp' ? cpuLimit : undefined,
+        google_search_cx: googleCx.trim() || null,
       }
       if (apiKey.trim()) payload.api_key = apiKey.trim()
+      if (googleKey.trim()) payload.google_search_api_key = googleKey.trim()
       return aiConfigApi.update(payload)
     },
     onSuccess: () => {
@@ -373,6 +379,37 @@ export default function AISettingsPage() {
           </div>
         </section>
       )}
+
+      {/* Google Search */}
+      <section style={card}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Google Search for Source Discovery</h2>
+        <p style={{ fontSize: 12, color: '#888', marginBottom: 14, lineHeight: 1.5 }}>
+          When discovering sources, the AI suggests feeds from memory — but URLs are often invented.
+          Connecting Google Search finds <em>real, live</em> feeds on the web.
+          Free tier: 100 searches/day.{' '}
+          <a href="https://programmablesearchengine.google.com/" target="_blank" rel="noreferrer" style={{ color: '#1677ff' }}>
+            Create a Search Engine
+          </a>{' '}(set to search the entire web), then get an API key from{' '}
+          <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" style={{ color: '#1677ff' }}>
+            Google Cloud Console
+          </a>{' '}(enable "Custom Search API").
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={labelStyle}>
+              API Key{current?.google_search_api_key_set && <span style={{ color: '#4caf50', marginLeft: 6 }}>✓ set</span>}
+            </label>
+            <Input label="" value={googleKey} onChange={e => setGoogleKey(e.target.value)}
+              placeholder={current?.google_search_api_key_set ? '••••••••  (leave blank to keep)' : 'AIza...'}
+              type="password" />
+          </div>
+          <div>
+            <label style={labelStyle}>Custom Search Engine ID (cx)</label>
+            <Input label="" value={googleCx} onChange={e => setGoogleCx(e.target.value)}
+              placeholder="e.g. 123456789abcdefgh:xyz" />
+          </div>
+        </div>
+      </section>
 
       {/* Test */}
       {provider !== 'none' && (

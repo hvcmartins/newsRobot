@@ -43,6 +43,8 @@ def _migrate():
         conn.execute(text("PRAGMA synchronous=NORMAL"))
     _add_column_if_missing("ai_config", "local_model_id", "VARCHAR(100)")
     _add_column_if_missing("ai_config", "cpu_limit_percent", "INTEGER DEFAULT 80")
+    _add_column_if_missing("ai_config", "google_search_api_key", "VARCHAR(500)")
+    _add_column_if_missing("ai_config", "google_search_cx", "VARCHAR(200)")
     _add_column_if_missing("articles", "summary", "TEXT")
     _add_column_if_missing("articles", "ai_enriched", "BOOLEAN DEFAULT 0")
     _add_column_if_missing("tenants", "topic_profile", "TEXT")
