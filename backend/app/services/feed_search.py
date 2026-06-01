@@ -76,10 +76,43 @@ def _google_search(query: str, api_key: str, cx: str) -> list[str]:
     return urls
 
 
+def _ai_search_queries(profile: str) -> list[str] | None:
+    """Ask the AI to generate targeted search queries for the profile.
+
+    Returns a list of query strings, or None if AI is unavailable.
+    """
+    try:
+        from app.services.ai.factory import get_ai_provider
+        from app.services.ai.null import NullProvider
+        ai = get_ai_provider()
+        if isinstance(ai, NullProvider):
+            return None
+
+        prompt = (
+            f"Generate 4 specific Google search queries to find news RSS feeds "
+            f"relevant to this profile. Each query should target a specific topic, "
+            f"region, or publication type mentioned. Keep queries short (2-4 words), "
+            f"specific, and in the language of the profile.\n\n"
+            f"Profile: {profile[:400]}\n\n"
+            f'Return JSON only: {{"queries": ["query1", "query2", "query3", "query4"]}}'
+        )
+        # Use the provider's internal JSON method if possible
+        if hasattr(ai, '_ask_json'):
+            data = ai._ask_json(prompt)
+            queries = [str(q).strip() for q in data.get("queries", []) if q]
+            if queries:
+                logger.info("AI generated %d search queries: %s", len(queries), queries)
+                return queries[:4]
+    except Exception as exc:
+        logger.debug("AI query generation failed: %s", exc)
+    return None
+
+
 def web_search_feeds(topic_profile: str, max_results: int = 8) -> list[dict]:
     """Return RSS feeds found via web search for the topic profile.
 
     Priority: Serper.dev → Google Custom Search → DuckDuckGo.
+    Uses AI to generate targeted queries; falls back to keyword extraction.
     Returns empty list on failure — callers treat this as best-effort.
     """
     creds = _load_search_creds()
@@ -89,23 +122,22 @@ def web_search_feeds(topic_profile: str, max_results: int = 8) -> list[dict]:
     else:
         logger.info("Source discovery: using DuckDuckGo (add a Serper.dev key in AI Settings for better results)")
 
-    queries = _build_queries(topic_profile)
+    # AI-generated queries are much better than naive word extraction
+    queries = _ai_search_queries(topic_profile) or _build_queries(topic_profile)
     page_urls: set[str] = set()
 
     for q in queries[:4]:
+        search_q = f"{q} news RSS feed"
         try:
             if creds and provider == "serper":
-                hits = _serper_search(f"{q} news RSS feed", **kwargs)
+                hits = _serper_search(search_q, **kwargs)
             elif creds and provider == "google":
-                hits = _google_search(f"{q} news RSS feed", **kwargs)
+                hits = _google_search(search_q, **kwargs)
             else:
-                hits = _ddg_search(f"{q} news RSS feed")
+                hits = _ddg_search(search_q)
             page_urls.update(hits[:6])
         except Exception as exc:
-            logger.debug("Search failed for %r: %s", q, exc)
-
-    if not page_urls:
-        return []
+            logger.debug("Search failed for %r: %s", search_q, exc)
 
     results: list[dict] = []
     seen_feed_urls: set[str] = set()
@@ -131,17 +163,26 @@ def web_search_feeds(topic_profile: str, max_results: int = 8) -> list[dict]:
 
 
 def _build_queries(profile: str) -> list[str]:
-    stopwords = {
-        "the","a","an","and","or","but","in","on","at","to","for","of","with",
-        "is","are","we","our","that","this","have","been","will","be","as","by",
-        "from","it","its","about","also","which","they","them","their","has",
-        "more","than","into","can","was","were","when","if","all","each","very",
-        "both","over","such","how","what","who","new","news","com","www",
-    }
-    words = re.findall(r'[A-Za-z]{4,}', profile)
-    kws = list(dict.fromkeys(w.lower() for w in words if w.lower() not in stopwords))[:12]
-    queries = [" ".join(kws[i:i + 2]) for i in range(0, min(len(kws), 8), 2)]
-    return queries[:4] if queries else ["general news"]
+    """Fallback query builder: extract capitalised phrases and proper nouns."""
+    # Prefer capitalised words (proper nouns, place names, organisations)
+    proper = re.findall(r'\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})*\b', profile)
+    seen: set[str] = set()
+    unique = [p for p in proper if p.lower() not in seen and not seen.add(p.lower())]  # type: ignore[func-returns-value]
+
+    # Build queries from the top proper nouns — use them as-is, not word-paired
+    queries = [p for p in unique[:4]]
+
+    if not queries:
+        # Last resort: pick longest uncommon lowercase words
+        stopwords = {
+            "the","and","for","with","that","this","have","from","they","their",
+            "which","will","about","also","more","into","when","each","both","over",
+            "news","information","coverage","needs","embassy","country",
+        }
+        words = re.findall(r'\b[a-z]{5,}\b', profile.lower())
+        queries = list(dict.fromkeys(w for w in words if w not in stopwords))[:4]
+
+    return queries if queries else ["international news"]
 
 
 def _ddg_search(query: str) -> list[str]:
