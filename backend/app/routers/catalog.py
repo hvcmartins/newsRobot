@@ -1,5 +1,5 @@
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -78,7 +78,7 @@ def _check_url(url: str) -> tuple[bool, str | None]:
         return any(t in ct for t in _FEED_CONTENT_TYPES) or r.status_code < 400
 
     try:
-        with httpx.Client(timeout=7, follow_redirects=True,
+        with httpx.Client(timeout=4, follow_redirects=True,
                           headers={"User-Agent": "Mozilla/5.0 (compatible; NewsRobot/1.0)"}) as c:
             try:
                 r = c.head(url)
@@ -87,14 +87,21 @@ def _check_url(url: str) -> tuple[bool, str | None]:
             except Exception:
                 pass
 
-            # Original URL failed — try to find a real feed on the same domain
+            # Original URL failed — check domain is alive before trying fallback paths
             base = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
+            try:
+                probe = c.head(base, timeout=3)
+                if probe.status_code >= 400:
+                    return False, None   # domain dead, skip fallbacks
+            except Exception:
+                return False, None       # domain unreachable
+
             for path in _FEED_PATHS:
                 candidate = base + path
                 if candidate == url:
                     continue
                 try:
-                    r = c.head(candidate)
+                    r = c.head(candidate, timeout=3)
                     if _is_feed_response(r):
                         return True, candidate
                 except Exception:
@@ -155,12 +162,19 @@ def discover_sources(tenant_id: int, db: Session = Depends(get_db)):
     with ThreadPoolExecutor(max_workers=min(len(suggestions), 10)) as pool:
         futures = {pool.submit(_check_url, s["url"]): i for i, s in enumerate(suggestions)}
         check_results: dict[int, tuple[bool, str | None]] = {}
-        for future in as_completed(futures, timeout=12):
-            idx = futures[future]
-            try:
-                check_results[idx] = future.result()
-            except Exception:
-                check_results[idx] = (False, None)
+        try:
+            for future in as_completed(futures, timeout=20):
+                idx = futures[future]
+                try:
+                    check_results[idx] = future.result()
+                except Exception:
+                    check_results[idx] = (False, None)
+        except FuturesTimeout:
+            # Some URL checks didn't finish in time — mark outstanding as unreachable
+            logger.warning("URL validation timed out; %d/%d completed",
+                           len(check_results), len(futures))
+            for idx in futures.values():
+                check_results.setdefault(idx, (False, None))
 
     result = []
     for i, s in enumerate(suggestions):
