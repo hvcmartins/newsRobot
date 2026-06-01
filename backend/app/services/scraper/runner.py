@@ -14,9 +14,9 @@ from .base import ScrapedArticle
 
 logger = logging.getLogger(__name__)
 
-# Bounded pool: at most this many enrichment threads hold a DB connection at once.
-# Prevents pool exhaustion when a single source returns hundreds of articles.
-_enrich_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="enrich")
+# Single enrichment worker: SQLite can't handle concurrent writers, and llamacpp
+# already serializes inference via its own lock — extra threads only add contention.
+_enrich_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="enrich")
 
 
 def _keyword_relevance(article: ScrapedArticle, keywords: list[str]) -> float:

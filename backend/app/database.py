@@ -5,11 +5,14 @@ from app.config import settings
 
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False},
+    connect_args={
+        "check_same_thread": False,
+        "timeout": 30,          # wait up to 30s for SQLite write lock
+    },
     echo=settings.debug,
-    pool_size=10,       # persistent connections (up from default 5)
-    max_overflow=20,    # burst headroom (up from default 10)
-    pool_timeout=60,    # wait up to 60s for a free connection (up from 30s)
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=60,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -34,6 +37,10 @@ def create_tables():
 
 def _migrate():
     """Add columns that were introduced after initial schema creation."""
+    # WAL mode drastically reduces write contention — set once, persists in the DB file
+    with engine.connect() as conn:
+        conn.execute(text("PRAGMA journal_mode=WAL"))
+        conn.execute(text("PRAGMA synchronous=NORMAL"))
     _add_column_if_missing("ai_config", "local_model_id", "VARCHAR(100)")
     _add_column_if_missing("ai_config", "cpu_limit_percent", "INTEGER DEFAULT 80")
     _add_column_if_missing("articles", "summary", "TEXT")
