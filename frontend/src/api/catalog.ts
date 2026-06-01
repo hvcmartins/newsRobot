@@ -11,6 +11,7 @@ export interface DiscoveredSource {
   reachable: boolean
   already_in_feed: boolean
   in_catalog: boolean
+  url_corrected?: boolean
 }
 
 export const catalogApi = {

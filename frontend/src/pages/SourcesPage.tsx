@@ -82,18 +82,20 @@ function AIDiscoverDrawer({ tenantId, onClose }: { tenantId: number; onClose: ()
 
       {results && results.length > 0 && (
         <>
-          <p style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
-            Found <strong>{results.length}</strong> suggested sources — click "Add" to include them in your feed.
-          </p>
+          <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
+            Found <strong>{results.filter(s => s.reachable).length} live</strong> / {results.length} suggested sources.
+            {' '}<span style={{ color: '#aaa' }}>AI suggestions may include invented URLs — "Offline" sources could not be reached.</span>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {results.map((src) => {
               const isAdded = addedUrls.has(src.url) || src.already_in_feed
               return (
                 <div key={src.url} style={{
-                  background: '#fff', borderRadius: 8, padding: '12px 14px',
+                  background: src.reachable ? '#fff' : '#fafafa', borderRadius: 8, padding: '12px 14px',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                  border: isAdded ? '1.5px solid var(--brand-color)' : '1.5px solid #e8edf5',
+                  border: isAdded ? '1.5px solid var(--brand-color)' : src.reachable ? '1.5px solid #e8edf5' : '1.5px solid #eee',
                   display: 'flex', alignItems: 'flex-start', gap: 12,
+                  opacity: src.reachable ? 1 : 0.6,
                 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -103,6 +105,7 @@ function AIDiscoverDrawer({ tenantId, onClose }: { tenantId: number; onClose: ()
                       {src.reachable
                         ? <Badge variant="success">● Live</Badge>
                         : <Badge variant="neutral">○ Offline</Badge>}
+                      {src.url_corrected && <Badge variant="info">URL corrected</Badge>}
                       {src.in_catalog && <Badge variant="info">In catalog</Badge>}
                     </div>
                     {src.description && (

@@ -60,14 +60,48 @@ def create_catalog_source(data: CatalogSourceCreate, db: Session = Depends(get_d
     return cs
 
 
-def _check_url(url: str) -> bool:
+def _check_url(url: str) -> tuple[bool, str | None]:
+    """Return (reachable, corrected_url_or_None).
+
+    If the given URL fails, try common feed paths on the same domain so
+    hallucinated AI URLs can be auto-corrected to a working feed.
+    """
+    import httpx
+    from urllib.parse import urlparse
+
+    _FEED_PATHS = ["/feed", "/rss.xml", "/feed.xml", "/atom.xml", "/rss",
+                   "/news/rss", "/feeds/all.rss.xml"]
+    _FEED_CONTENT_TYPES = ("rss", "atom", "xml", "feed")
+
+    def _is_feed_response(r) -> bool:
+        ct = r.headers.get("content-type", "").lower()
+        return any(t in ct for t in _FEED_CONTENT_TYPES) or r.status_code < 400
+
     try:
-        import httpx
-        with httpx.Client(timeout=6, follow_redirects=True) as c:
-            r = c.head(url)
-            return r.status_code < 400
+        with httpx.Client(timeout=7, follow_redirects=True,
+                          headers={"User-Agent": "Mozilla/5.0 (compatible; NewsRobot/1.0)"}) as c:
+            try:
+                r = c.head(url)
+                if r.status_code < 400:
+                    return True, None
+            except Exception:
+                pass
+
+            # Original URL failed — try to find a real feed on the same domain
+            base = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
+            for path in _FEED_PATHS:
+                candidate = base + path
+                if candidate == url:
+                    continue
+                try:
+                    r = c.head(candidate)
+                    if _is_feed_response(r):
+                        return True, candidate
+                except Exception:
+                    continue
     except Exception:
-        return False
+        pass
+    return False, None
 
 
 @router.post("/discover")
@@ -120,24 +154,32 @@ def discover_sources(tenant_id: int, db: Session = Depends(get_db)):
 
     with ThreadPoolExecutor(max_workers=min(len(suggestions), 10)) as pool:
         futures = {pool.submit(_check_url, s["url"]): i for i, s in enumerate(suggestions)}
-        reachable: dict[int, bool] = {}
-        for future in as_completed(futures, timeout=9):
+        check_results: dict[int, tuple[bool, str | None]] = {}
+        for future in as_completed(futures, timeout=12):
             idx = futures[future]
             try:
-                reachable[idx] = future.result()
+                check_results[idx] = future.result()
             except Exception:
-                reachable[idx] = False
+                check_results[idx] = (False, None)
 
     result = []
     for i, s in enumerate(suggestions):
+        ok, corrected_url = check_results.get(i, (False, None))
+        url = corrected_url or s["url"]
         result.append({
             **s,
-            "reachable": reachable.get(i, False),
-            "already_in_feed": s["url"] in tenant_source_urls,
-            "in_catalog": s["url"] in catalog_urls,
+            "url": url,
+            "reachable": ok,
+            "already_in_feed": url in tenant_source_urls or s["url"] in tenant_source_urls,
+            "in_catalog": url in catalog_urls or s["url"] in catalog_urls,
+            "url_corrected": corrected_url is not None,
         })
 
-    logger.info("Source discovery returned %d suggestions for '%s'", len(result), tenant.name)
+    # Reachable sources first, then offline — within each group keep original order
+    result.sort(key=lambda s: (0 if s["reachable"] else 1))
+
+    logger.info("Source discovery: %d reachable / %d total for '%s'",
+                sum(1 for s in result if s["reachable"]), len(result), tenant.name)
     return {"sources": result}
 
 
