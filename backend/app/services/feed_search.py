@@ -77,10 +77,7 @@ def _google_search(query: str, api_key: str, cx: str) -> list[str]:
 
 
 def _ai_search_queries(profile: str) -> list[str] | None:
-    """Ask the AI to generate targeted search queries for the profile.
-
-    Returns a list of query strings, or None if AI is unavailable.
-    """
+    """Ask the AI to generate one targeted search query per topic area in the profile."""
     try:
         from app.services.ai.factory import get_ai_provider
         from app.services.ai.null import NullProvider
@@ -89,31 +86,41 @@ def _ai_search_queries(profile: str) -> list[str] | None:
             return None
 
         prompt = (
-            f"Generate 4 specific Google search queries to find news RSS feeds "
-            f"relevant to this profile. Each query should target a specific topic, "
-            f"region, or publication type mentioned. Keep queries short (2-4 words), "
-            f"specific, and in the language of the profile.\n\n"
-            f"Profile: {profile[:400]}\n\n"
-            f'Return JSON only: {{"queries": ["query1", "query2", "query3", "query4"]}}'
+            "You are building search queries to find RSS news feeds.\n"
+            "The profile below has multiple topic sections. Generate ONE short search query "
+            "per section (2-4 words each), covering as many sections as possible (up to 8 queries).\n\n"
+            "Rules:\n"
+            "- Each query must be specific: use organisation names, country names, or exact topics\n"
+            "- Do NOT include the words 'news', 'RSS', or 'feed' — they will be added automatically\n"
+            "- Do NOT use generic terms like 'information', 'coverage', 'embassy', 'updates'\n"
+            "- Prefer internationally recognised names (e.g. 'Timor-Leste', 'ASEAN', 'CPLP', 'UNESCO')\n\n"
+            f"Profile:\n{profile[:1200]}\n\n"
+            'Return JSON only: {"queries": ["Timor-Leste politics", "ASEAN summits", "EU ASEAN policy", "OACPS ACP", "CPLP lusophone", "SIDS climate finance", "UNESCO cultural heritage", "Brussels diplomacy"]}'
         )
-        # Use the provider's internal JSON method if possible
         if hasattr(ai, '_ask_json'):
             data = ai._ask_json(prompt)
-            queries = [str(q).strip() for q in data.get("queries", []) if q]
-            if queries:
-                logger.info("AI generated %d search queries: %s", len(queries), queries)
-                return queries[:4]
+            queries = [str(q).strip() for q in data.get("queries", []) if str(q).strip()]
+            # Strip any accidental "news"/"RSS"/"feed" the model added anyway
+            cleaned = []
+            for q in queries:
+                q = re.sub(r'\b(news|rss|feed)\b', '', q, flags=re.IGNORECASE).strip()
+                q = re.sub(r'\s{2,}', ' ', q).strip(' ,')
+                if q:
+                    cleaned.append(q)
+            if cleaned:
+                logger.info("AI generated %d search queries: %s", len(cleaned), cleaned)
+                return cleaned[:8]
     except Exception as exc:
         logger.debug("AI query generation failed: %s", exc)
     return None
 
 
-def web_search_feeds(topic_profile: str, max_results: int = 8) -> list[dict]:
+def web_search_feeds(topic_profile: str, max_results: int = 12) -> list[dict]:
     """Return RSS feeds found via web search for the topic profile.
 
     Priority: Serper.dev → Google Custom Search → DuckDuckGo.
-    Uses AI to generate targeted queries; falls back to keyword extraction.
-    Returns empty list on failure — callers treat this as best-effort.
+    Uses AI to generate one targeted query per topic section; falls back
+    to proper-noun extraction. Returns empty list on failure.
     """
     creds = _load_search_creds()
     if creds:
@@ -122,12 +129,11 @@ def web_search_feeds(topic_profile: str, max_results: int = 8) -> list[dict]:
     else:
         logger.info("Source discovery: using DuckDuckGo (add a Serper.dev key in AI Settings for better results)")
 
-    # AI-generated queries are much better than naive word extraction
     queries = _ai_search_queries(topic_profile) or _build_queries(topic_profile)
     page_urls: set[str] = set()
 
-    for q in queries[:4]:
-        search_q = f"{q} news RSS feed"
+    for q in queries[:8]:
+        search_q = f"{q} RSS feed"
         try:
             if creds and provider == "serper":
                 hits = _serper_search(search_q, **kwargs)
