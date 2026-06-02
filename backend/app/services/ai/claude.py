@@ -1,9 +1,11 @@
 import json
 import logging
+import time
 from .base import (AIProvider, RelevanceResult,
                    RELEVANCE_SYSTEM_TPL, RELEVANCE_USER_TPL,
                    DISCOVER_SYSTEM, DISCOVER_USER_TPL,
                    SUGGEST_CATEGORIES_PROMPT, normalise_discovered)
+from .stats import record_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,9 @@ class ClaudeProvider(AIProvider):
             # same profile the model reuses the cached context (90% cost saving).
             kwargs["system"] = [{"type": "text", "text": system,
                                  "cache_control": {"type": "ephemeral"}}]
+        t0 = time.monotonic()
         msg = self._client.messages.create(**kwargs)
+        record_tokens(msg.usage.output_tokens, time.monotonic() - t0)
         return msg.content[0].text.strip()
 
     def _ask_array(self, prompt: str, system: str | None = None) -> list:

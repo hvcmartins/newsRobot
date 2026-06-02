@@ -25,7 +25,7 @@ export const articleApi = {
   clearAll: (tenantId: number) =>
     client.delete('/api/articles/', { params: { tenant_id: tenantId } }).then((r) => r.data),
   enrichmentStatus: (tenantId: number) =>
-    client.get<{ total: number; enriched: number; pending: number }>(
+    client.get<{ total: number; enriched: number; pending: number; tokens_per_second: number | null; seconds_per_article: number | null }>(
       '/api/articles/enrichment-status', { params: { tenant_id: tenantId } }
     ).then((r) => r.data),
   triggerEnrich: (tenantId: number, force = false) =>

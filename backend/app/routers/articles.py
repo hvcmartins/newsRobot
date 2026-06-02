@@ -68,13 +68,21 @@ def list_articles(
 @router.get("/enrichment-status")
 def enrichment_status(tenant_id: int, db: Session = Depends(get_db)):
     """Return AI enrichment progress counts for the tenant's articles."""
+    from app.services.ai.stats import get_stats
     base = db.query(Article).filter(
         Article.tenant_id == tenant_id,
         Article.duplicate_of_id.is_(None),
     )
     total = base.count()
     enriched = base.filter(Article.ai_enriched == True).count()
-    return {"total": total, "enriched": enriched, "pending": total - enriched}
+    stats = get_stats()
+    return {
+        "total": total,
+        "enriched": enriched,
+        "pending": total - enriched,
+        "tokens_per_second": stats["tokens_per_second"],
+        "seconds_per_article": stats["seconds_per_article"],
+    }
 
 
 @router.post("/enrich")

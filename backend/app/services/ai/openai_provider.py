@@ -1,10 +1,12 @@
 import json
 import logging
+import time
 from .base import (AIProvider, RelevanceResult,
                    RELEVANCE_SYSTEM_TPL, RELEVANCE_USER_TPL,
                    DISCOVER_SYSTEM, DISCOVER_USER_TPL,
                    SUGGEST_CATEGORIES_PROMPT,
                    normalise_discovered, repair_json_array, extract_sources_from_text)
+from .stats import record_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +28,14 @@ class OpenAIProvider(AIProvider):
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
+        t0 = time.monotonic()
         resp = self._client.chat.completions.create(
             model=self._model,
             max_tokens=max_tokens,
             messages=messages,
         )
+        if resp.usage:
+            record_tokens(resp.usage.completion_tokens, time.monotonic() - t0)
         return resp.choices[0].message.content.strip()
 
     def _ask_array(self, prompt: str, system: str | None = None) -> list:

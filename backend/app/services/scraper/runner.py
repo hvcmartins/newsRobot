@@ -2,6 +2,7 @@ import difflib
 import json
 import logging
 import datetime
+import time
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -64,7 +65,10 @@ def _enrich_article(article_id: int, topic_profile: str | None,
     if not wait_for_ai(timeout=600):
         ai_log.info("Discovery held the AI for 10 min — proceeding anyway")
 
+    from app.services.ai.stats import record_article
+
     db = SessionLocal()
+    t_article_start = time.monotonic()
     try:
         article = db.get(Article, article_id)
         if not article or article.ai_enriched:
@@ -117,6 +121,7 @@ def _enrich_article(article_id: int, topic_profile: str | None,
 
         article.ai_enriched = True
         db.commit()
+        record_article(time.monotonic() - t_article_start)
     except Exception as exc:
         logger.error("Enrichment failed for article %d: %s", article_id, exc)
     finally:

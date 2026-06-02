@@ -102,6 +102,12 @@ export default function ArticlesPage() {
   const enrichTotal = enrichStatus?.total ?? 0
   const enriched = enrichStatus?.enriched ?? 0
   const enrichPct = enrichTotal > 0 ? Math.round((enriched / enrichTotal) * 100) : 0
+  const tps: number | null = enrichStatus?.tokens_per_second ?? null
+  const secsPerArticle: number | null = enrichStatus?.seconds_per_article ?? null
+  const etaSecs = secsPerArticle != null && pending > 0 ? Math.ceil(secsPerArticle * pending) : null
+  const etaLabel = etaSecs == null ? null
+    : etaSecs < 60 ? `~${etaSecs}s left`
+    : `~${Math.ceil(etaSecs / 60)}min left`
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -160,6 +166,11 @@ export default function ArticlesPage() {
               transition: 'width 0.6s ease',
             }} />
           </div>
+          {pending > 0 && (tps != null || etaLabel != null) && (
+            <span style={{ fontSize: 11, color: '#9c27b0', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+              {tps != null && `${tps} tok/s`}{tps != null && etaLabel && ' · '}{etaLabel}
+            </span>
+          )}
           {pending > 0 && (
             <Button size="sm" variant="secondary" loading={enrichMut.isPending}
               onClick={() => enrichMut.mutate()}
