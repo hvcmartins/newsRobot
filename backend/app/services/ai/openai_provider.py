@@ -26,13 +26,18 @@ class OpenAIProvider(AIProvider):
         self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model
         self._extra_body = extra_body or {}
+        # Append /no_think to every prompt when enable_thinking=False is requested.
+        # Works at the model level (Qwen3 instruction tuning) even if the server
+        # ignores the enable_thinking flag in extra_body.
+        self._no_think = self._extra_body.get("enable_thinking") is False
 
     def _ask(self, prompt: str, max_tokens: int = 512,
              system: str | None = None) -> str:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt})
+        p = prompt + "\n/no_think" if self._no_think else prompt
+        messages.append({"role": "user", "content": p})
         t0 = time.monotonic()
         resp = self._client.chat.completions.create(
             model=self._model,
