@@ -215,13 +215,18 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         now = datetime.datetime.utcnow()
 
         for art in articles:
-            # Age filter — applies to both RSS and web scraper when date is available
+            # Age filter
             if art.published_at:
                 pub = art.published_at.replace(tzinfo=None)
                 if (now - pub) > max_age:
                     logger.debug("Skipping old article (%s): '%s'",
                                  pub.date(), art.title[:70])
                     continue
+            elif source.type == SourceType.scrape:
+                # Web-scraped article with no detectable date — skip to avoid
+                # importing stale archive pages that have no publication timestamp.
+                logger.debug("Skipping undated web article: '%s'", art.title[:70])
+                continue
 
             # Persistent deduplication via scraped_urls (survives archiving/deletion)
             if _is_url_seen(db, source.tenant_id, art.url):
