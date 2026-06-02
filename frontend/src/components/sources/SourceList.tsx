@@ -21,6 +21,8 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
   const [editing, setEditing] = useState<Source | null>(null)
   const [testResult, setTestResult] = useState<{ id: number; data: unknown } | null>(null)
   const [testing, setTesting] = useState<number | null>(null)
+  const [scraping, setScraping] = useState<number | null>(null)
+  const [scraped, setScraped] = useState<Set<number>>(new Set())
 
   const deleteMut = useMutation({
     mutationFn: sourceApi.delete,
@@ -48,6 +50,21 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
       setTestResult({ id, data: { error: e instanceof Error ? e.message : 'Test failed' } })
     } finally {
       setTesting(null)
+    }
+  }
+
+  const handleScrapeNow = async (id: number) => {
+    setScraping(id)
+    try {
+      await sourceApi.scrapeNow(id)
+      setScraped((prev) => new Set([...prev, id]))
+      qc.invalidateQueries({ queryKey: ['sources', tenantId] })
+      qc.invalidateQueries({ queryKey: ['articles'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Scrape failed')
+    } finally {
+      setScraping(null)
     }
   }
 
@@ -98,7 +115,7 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
                   </div>
                 </td>
                 <td style={{ padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <Button size="sm" variant="ghost"
                       onClick={() => toggleMut.mutate({ id: s.id, is_active: !s.is_active })}
                       style={{ color: '#555', border: '1px solid #ddd', padding: '4px 8px' }}>
@@ -106,6 +123,19 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => setEditing(s)}>Edit</Button>
                     <Button size="sm" variant="secondary" loading={testing === s.id} onClick={() => handleTest(s.id)}>Test</Button>
+                    <Button
+                      size="sm"
+                      loading={scraping === s.id}
+                      disabled={!s.is_active}
+                      onClick={() => handleScrapeNow(s.id)}
+                      style={{
+                        background: scraped.has(s.id) ? '#e8f5e9' : 'var(--brand-color)',
+                        borderColor: scraped.has(s.id) ? '#a5d6a7' : 'var(--brand-color)',
+                        color: scraped.has(s.id) ? '#2e7d32' : '#fff',
+                      }}
+                    >
+                      {scraped.has(s.id) ? '✓ Scraped' : '▶ Scrape'}
+                    </Button>
                     <Button size="sm" variant="danger"
                       onClick={() => {
                         if (confirm(`Delete "${s.name}"?`)) deleteMut.mutate(s.id)

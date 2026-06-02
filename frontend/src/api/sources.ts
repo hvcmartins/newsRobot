@@ -24,4 +24,8 @@ export const sourceApi = {
     client.post<{ results: SourceCheckResult[] }>(
       '/api/sources/check-all', null, { params: { tenant_id: tenantId } }
     ).then((r) => r.data),
+  scrapeNow: (sourceId: number) =>
+    client.post(`/api/scrape-runs/trigger/${sourceId}`).then((r) => r.data),
+  scrapeAllNow: (tenantId: number) =>
+    client.post(`/api/scrape-runs/trigger`, null, { params: { tenant_id: tenantId } }).then((r) => r.data),
 }

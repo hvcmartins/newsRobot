@@ -17,6 +17,7 @@ services:
       LOG_LEVEL: info
       DEBUG: "true"
       CORS_ORIGINS: "http://localhost:5173"
+      TZ: "${TZ:-UTC}"
       AI_ENABLED: "${AI_ENABLED:-false}"
       AI_PROVIDER: "${AI_PROVIDER:-none}"
       AI_API_KEY: "${AI_API_KEY:-}"

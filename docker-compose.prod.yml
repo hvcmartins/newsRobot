@@ -12,6 +12,7 @@ services:
       DATABASE_URL: sqlite:////data/newsrobot.db
       PORT: "8000"
       LOG_LEVEL: info
+      TZ: "${TZ:-UTC}"
       AI_ENABLED: "${AI_ENABLED:-false}"
       AI_PROVIDER: "${AI_PROVIDER:-none}"
       AI_API_KEY: "${AI_API_KEY:-}"

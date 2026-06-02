@@ -54,14 +54,29 @@ export default function ArticlesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['articles', tenantId] }),
   })
 
+  const scrapeNowMut = useMutation({
+    mutationFn: () => sourceApi.scrapeAllNow(tenantId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['articles', tenantId] })
+      qc.invalidateQueries({ queryKey: ['dashboard', tenantId] })
+    },
+  })
+
   const pauseMut = useMutation({
     mutationFn: () => tenantApi.pauseScrape(activeTenant!.slug),
     onSuccess: () => refreshTenants(),
   })
 
   const resumeMut = useMutation({
-    mutationFn: () => tenantApi.resumeScrape(activeTenant!.slug),
-    onSuccess: () => refreshTenants(),
+    mutationFn: async () => {
+      await tenantApi.resumeScrape(activeTenant!.slug)
+      await sourceApi.scrapeAllNow(tenantId)
+    },
+    onSuccess: () => {
+      refreshTenants()
+      qc.invalidateQueries({ queryKey: ['articles', tenantId] })
+      qc.invalidateQueries({ queryKey: ['dashboard', tenantId] })
+    },
   })
 
   const [enrichError, setEnrichError] = useState<string | null>(null)
@@ -140,6 +155,20 @@ export default function ArticlesPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          {!scrapePaused && (
+            <Button
+              size="sm"
+              loading={scrapeNowMut.isPending}
+              onClick={() => scrapeNowMut.mutate()}
+              style={{
+                background: scrapeNowMut.isSuccess ? '#e8f5e9' : 'var(--brand-color)',
+                borderColor: scrapeNowMut.isSuccess ? '#a5d6a7' : 'var(--brand-color)',
+                color: scrapeNowMut.isSuccess ? '#2e7d32' : '#fff',
+              }}
+            >
+              {scrapeNowMut.isSuccess ? '✓ Triggered' : '▶ Scrape now'}
+            </Button>
+          )}
           {scrapePaused ? (
             <Button
               size="sm"
@@ -147,7 +176,7 @@ export default function ArticlesPage() {
               onClick={() => resumeMut.mutate()}
               style={{ background: '#2e7d32', borderColor: '#2e7d32' }}
             >
-              ▶ Resume scraping
+              ▶ Resume & scrape
             </Button>
           ) : (
             <Button
@@ -171,7 +200,7 @@ export default function ArticlesPage() {
           <span>⏸ Scraping is paused — no new articles will be fetched until you resume.</span>
           <Button size="sm" loading={resumeMut.isPending} onClick={() => resumeMut.mutate()}
             style={{ fontSize: 11, padding: '3px 10px', background: '#2e7d32', borderColor: '#2e7d32' }}>
-            ▶ Resume
+            ▶ Resume & scrape
           </Button>
         </div>
       )}
