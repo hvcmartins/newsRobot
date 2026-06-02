@@ -95,8 +95,10 @@ def _build_provider(db=None) -> AIProvider:
             return NullProvider()
         from .openai_provider import OpenAIProvider
         logger.info("AI: LLM Server (url=%s, model=%s)", base_url, model)
-        # enable_thinking=false suppresses Qwen3/DeepSeek-R1 reasoning blocks at the
-        # server level (llama.cpp ≥ b3000). Ignored by servers that don't support it.
+        # Disable Qwen3/DeepSeek-R1 reasoning at the server level.
+        # Confirmed working: launch llama.cpp server with --reasoning off
+        # The extra_body flags are a best-effort hint for servers that read them
+        # from the request (behaviour varies by build).
         return OpenAIProvider(api_key=key or "local", model=model, base_url=base_url,
                               extra_body={"enable_thinking": False, "thinking": False})
 
