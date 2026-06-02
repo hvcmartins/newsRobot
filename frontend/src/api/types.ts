@@ -9,6 +9,8 @@ export interface Tenant {
   topic_profile: string | null
   ai_categories: string | null
   max_article_age_days: number | null
+  accepted_languages: string | null   // JSON list e.g. '["en","pt","fr"]'
+  translation_language: string | null // e.g. "en"
   created_at: string
   updated_at: string
 }
@@ -51,6 +53,8 @@ export interface Article {
   is_read: boolean
   ai_enriched: boolean
   duplicate_of_id: number | null
+  archived_at: string | null
+  digest_id: number | null
 }
 
 export interface ArticleListResponse {
@@ -74,12 +78,30 @@ export interface EmailConfig {
   frequency: 'immediate' | 'daily' | 'weekly'
   send_time: string
   lookback_hours: number
-  schedule_overrides: string | null  // JSON: {"monday": 72, ...}
+  schedule_overrides: string | null
   subject_template: string
   intro_text: string | null
   is_active: boolean
+  monthly_digest_enabled: boolean
+  monthly_digest_day: number
+  monthly_digest_time: string
+  yearly_digest_enabled: boolean
+  yearly_digest_month: number
+  yearly_digest_day: number
+  yearly_digest_time: string
   created_at: string
   updated_at: string
+}
+
+export interface DashboardStats {
+  scraped_today: number
+  pending_count: number
+  enrichment_rate: number | null
+  last_digest_at: string | null
+  last_digest_subject: string | null
+  next_send_at: string | null
+  recent_runs_ok: number
+  recent_runs_error: number
 }
 
 export interface ScrapeRun {

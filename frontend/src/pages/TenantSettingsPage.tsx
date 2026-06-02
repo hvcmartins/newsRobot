@@ -2,9 +2,25 @@ import React, { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTenant } from '@/contexts/TenantContext'
 import { tenantApi } from '@/api/tenants'
+import { articleApi } from '@/api/articles'
 import type { Tenant } from '@/api/types'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
+
+const LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'it', label: 'Italian' },
+  { code: 'nl', label: 'Dutch' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'zh', label: 'Chinese' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'ru', label: 'Russian' },
+]
 
 export default function TenantSettingsPage() {
   const { activeTenant, refreshTenants } = useTenant()
@@ -20,6 +36,9 @@ export default function TenantSettingsPage() {
   const [addingTenant, setAddingTenant] = useState(false)
   const [newTenant, setNewTenant] = useState({ name: '', slug: '', primary_color: '#0066cc' })
 
+  // Danger zone confirmation states
+  const [resetConfirm, setResetConfirm] = useState<'queue' | 'archive' | 'scraped-urls' | null>(null)
+
   useEffect(() => {
     if (activeTenant) {
       setForm({ ...activeTenant })
@@ -34,6 +53,17 @@ export default function TenantSettingsPage() {
 
   const setKeywords = (kws: string[]) => set({ global_keywords: JSON.stringify(kws) })
 
+  const acceptedLangs: string[] = (() => {
+    try { return JSON.parse(form.accepted_languages ?? '[]') } catch { return [] }
+  })()
+
+  const toggleLang = (code: string) => {
+    const next = acceptedLangs.includes(code)
+      ? acceptedLangs.filter((l) => l !== code)
+      : [...acceptedLangs, code]
+    set({ accepted_languages: next.length ? JSON.stringify(next) : null })
+  }
+
   const saveMut = useMutation({
     mutationFn: async () => {
       if (!activeTenant) return
@@ -45,6 +75,8 @@ export default function TenantSettingsPage() {
         schedule_cron: form.schedule_cron,
         topic_profile: form.topic_profile,
         max_article_age_days: form.max_article_age_days ?? null,
+        accepted_languages: form.accepted_languages ?? null,
+        translation_language: form.translation_language ?? null,
       })
     },
     onSuccess: () => {
@@ -69,6 +101,32 @@ export default function TenantSettingsPage() {
     onSuccess: () => {
       refreshTenants()
       localStorage.removeItem('activeSlug')
+    },
+  })
+
+  const resetQueueMut = useMutation({
+    mutationFn: () => articleApi.resetQueue(activeTenant!.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['articles', activeTenant!.id] })
+      qc.invalidateQueries({ queryKey: ['enrichment-status', activeTenant!.id] })
+      qc.invalidateQueries({ queryKey: ['dashboard', activeTenant!.id] })
+      setResetConfirm(null)
+    },
+  })
+
+  const resetArchiveMut = useMutation({
+    mutationFn: () => articleApi.resetArchive(activeTenant!.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['archive', activeTenant!.id] })
+      qc.invalidateQueries({ queryKey: ['dashboard', activeTenant!.id] })
+      setResetConfirm(null)
+    },
+  })
+
+  const resetScrapedUrlsMut = useMutation({
+    mutationFn: () => articleApi.resetScrapedUrls(activeTenant!.id),
+    onSuccess: () => {
+      setResetConfirm(null)
     },
   })
 
@@ -109,10 +167,11 @@ export default function TenantSettingsPage() {
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>Tenant Settings</h1>
       {!activeTenant.slug && (
         <div style={{ background: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: '#e65100' }}>
-          ⚠ This tenant has no slug — saves will fail until you rebuild the container. The startup migration will auto-assign a slug from the company name.
+          ⚠ This tenant has no slug — saves will fail until you rebuild the container.
         </div>
       )}
 
+      {/* General */}
       <section style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600 }}>General</h2>
         <Input label="Company Name" value={form.name ?? ''} onChange={(e) => set({ name: e.target.value })} />
@@ -151,6 +210,61 @@ export default function TenantSettingsPage() {
         </div>
       </section>
 
+      {/* Language Settings */}
+      <section style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600 }}>Language Settings</h2>
+        <p style={{ fontSize: 13, color: '#666' }}>
+          Select which article languages to accept. Articles in other languages will have their AI summary translated.
+          Leave empty to accept all languages without translation.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Accepted Languages</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {LANGUAGES.map(({ code, label }) => {
+              const active = acceptedLangs.includes(code)
+              return (
+                <button
+                  key={code}
+                  onClick={() => toggleLang(code)}
+                  style={{
+                    padding: '5px 12px', borderRadius: 16, fontSize: 12, fontWeight: 500,
+                    cursor: 'pointer', border: '1px solid',
+                    background: active ? 'var(--brand-color)' : '#fff',
+                    borderColor: active ? 'var(--brand-color)' : '#ddd',
+                    color: active ? '#fff' : '#555',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          {acceptedLangs.length === 0 && (
+            <p style={{ fontSize: 11, color: '#bbb', margin: 0 }}>All languages accepted — no translation will occur.</p>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Translation Language</label>
+          <p style={{ fontSize: 11, color: '#888', margin: 0 }}>
+            When an article's language is not in the accepted list, translate its AI summary into this language.
+          </p>
+          <select
+            value={form.translation_language ?? ''}
+            onChange={(e) => set({ translation_language: e.target.value || null })}
+            style={{ padding: '7px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13, maxWidth: 220 }}
+          >
+            <option value="">None (keep original)</option>
+            {LANGUAGES.map(({ code, label }) => (
+              <option key={code} value={code}>{label}</option>
+            ))}
+          </select>
+        </div>
+      </section>
+
+      {/* AI Topic Profile */}
       <section style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600 }}>AI Topic Profile</h2>
         <p style={{ fontSize: 13, color: '#666' }}>Describe what news your company cares about. The AI uses this to filter and score articles.</p>
@@ -186,19 +300,18 @@ export default function TenantSettingsPage() {
               ))}
             </div>
           ) : (
-            <p style={{ fontSize: 12, color: '#aaa', margin: 0 }}>
-              No categories yet — generate them from your profile below.
-            </p>
+            <p style={{ fontSize: 12, color: '#aaa', margin: 0 }}>No categories yet — generate them from your profile below.</p>
           )}
           <Button variant="secondary" size="sm" loading={suggestingCats} onClick={suggestCategories}
             disabled={!form.topic_profile?.trim()}>
             ✦ Generate Categories from Profile
           </Button>
         </div>
+
         <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '4px 0' }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ fontSize: 12, color: '#888' }}>
-            Saves all settings on this page (general, branding, schedule and profile).
+            Saves all settings on this page.
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {saved && <span style={{ fontSize: 12, color: '#2e7d32' }}>✓ Saved</span>}
@@ -208,6 +321,7 @@ export default function TenantSettingsPage() {
         </div>
       </section>
 
+      {/* Add New Company */}
       <section style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600 }}>Add New Company</h2>
         {addingTenant ? (
@@ -231,27 +345,95 @@ export default function TenantSettingsPage() {
         )}
       </section>
 
+      {/* Danger Zone */}
       <section style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', border: '1px solid #ffcdd2' }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#c62828', marginBottom: 12 }}>Danger Zone</h2>
-        <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
-          Delete <strong>{activeTenant.name}</strong> and all its sources, articles, and email config.
-          Type the tenant name to confirm.
-        </p>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            value={deleteConfirm}
-            onChange={(e) => setDeleteConfirm(e.target.value)}
-            placeholder={activeTenant.name}
-            style={{ flex: 1, padding: '7px 10px', border: '1px solid #ffcdd2', borderRadius: 6, fontSize: 13 }}
-          />
-          <Button
-            variant="danger"
-            disabled={deleteConfirm !== activeTenant.name}
-            loading={deleteMut.isPending}
-            onClick={() => deleteMut.mutate()}
-          >
-            Delete Tenant
-          </Button>
+        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#c62828', marginBottom: 16 }}>Danger Zone</h2>
+
+        {/* Reset Queue */}
+        <div style={{ borderBottom: '1px solid #ffeaea', paddingBottom: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Reset News Queue</div>
+              <div style={{ fontSize: 12, color: '#666' }}>Delete all pending (non-archived) articles from the queue.</div>
+            </div>
+            {resetConfirm === 'queue' ? (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#c62828' }}>Delete all pending articles?</span>
+                <Button size="sm" variant="danger" loading={resetQueueMut.isPending} onClick={() => resetQueueMut.mutate()}>
+                  Confirm
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setResetConfirm(null)}>Cancel</Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="danger" onClick={() => setResetConfirm('queue')}>Reset Queue</Button>
+            )}
+          </div>
+        </div>
+
+        {/* Reset Archive */}
+        <div style={{ borderBottom: '1px solid #ffeaea', paddingBottom: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Reset Archive</div>
+              <div style={{ fontSize: 12, color: '#666' }}>Delete all archived articles and sent digest records.</div>
+            </div>
+            {resetConfirm === 'archive' ? (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#c62828' }}>Delete all archived articles?</span>
+                <Button size="sm" variant="danger" loading={resetArchiveMut.isPending} onClick={() => resetArchiveMut.mutate()}>
+                  Confirm
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setResetConfirm(null)}>Cancel</Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="danger" onClick={() => setResetConfirm('archive')}>Reset Archive</Button>
+            )}
+          </div>
+        </div>
+
+        {/* Reset Scraped URLs */}
+        <div style={{ borderBottom: '1px solid #ffeaea', paddingBottom: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Reset Scraped URL History</div>
+              <div style={{ fontSize: 12, color: '#666' }}>Clear deduplication history — previously seen URLs will be re-scraped on next run.</div>
+            </div>
+            {resetConfirm === 'scraped-urls' ? (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#c62828' }}>Clear URL history?</span>
+                <Button size="sm" variant="danger" loading={resetScrapedUrlsMut.isPending} onClick={() => resetScrapedUrlsMut.mutate()}>
+                  Confirm
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setResetConfirm(null)}>Cancel</Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="danger" onClick={() => setResetConfirm('scraped-urls')}>Reset URL History</Button>
+            )}
+          </div>
+        </div>
+
+        {/* Delete Tenant */}
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#c62828', marginBottom: 4 }}>Delete Tenant</div>
+          <p style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>
+            Permanently delete <strong>{activeTenant.name}</strong> and all its data. Type the tenant name to confirm.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder={activeTenant.name}
+              style={{ flex: 1, padding: '7px 10px', border: '1px solid #ffcdd2', borderRadius: 6, fontSize: 13 }}
+            />
+            <Button
+              variant="danger"
+              disabled={deleteConfirm !== activeTenant.name}
+              loading={deleteMut.isPending}
+              onClick={() => deleteMut.mutate()}
+            >
+              Delete Tenant
+            </Button>
+          </div>
         </div>
       </section>
     </div>

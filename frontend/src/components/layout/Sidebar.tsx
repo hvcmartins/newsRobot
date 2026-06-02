@@ -5,30 +5,32 @@ import { useQuery } from '@tanstack/react-query'
 import { articleApi } from '@/api/articles'
 
 const nav = [
-  { to: '/articles',       label: 'Articles',       icon: '📰' },
-  { to: '/sources',        label: 'My Sources',      icon: '🔗' },
-  { to: '/source-library', label: 'Source Library',  icon: '📚' },
-  { to: '/email',          label: 'Email',           icon: '✉️' },
-  { to: '/run-history',    label: 'Run History',     icon: '📊' },
-  { to: '/logs',           label: 'Activity Log',    icon: '📡' },
-  { to: '/ai-settings',    label: 'AI Settings',     icon: '✦' },
-  { to: '/settings',       label: 'Settings',        icon: '⚙️' },
+  { to: '/dashboard',     label: 'Dashboard',      icon: '📊' },
+  { to: '/articles',      label: 'News Queue',     icon: '📰' },
+  { to: '/archive',       label: 'Archive',        icon: '🗂' },
+  { to: '/sources',       label: 'My Sources',     icon: '🔗' },
+  { to: '/source-library', label: 'Source Library', icon: '📚' },
+  { to: '/email',         label: 'Email',          icon: '✉️' },
+  { to: '/run-history',   label: 'Run History',    icon: '🔁' },
+  { to: '/logs',          label: 'Activity Log',   icon: '📡' },
+  { to: '/ai-settings',   label: 'AI Settings',    icon: '✦' },
+  { to: '/settings',      label: 'Settings',       icon: '⚙️' },
 ]
 
 export default function Sidebar() {
   const { activeTenant } = useTenant()
 
   const { data } = useQuery({
-    queryKey: ['articles', 'unread-count', activeTenant?.id],
+    queryKey: ['articles', 'queue-count', activeTenant?.id],
     queryFn: () =>
       activeTenant
-        ? articleApi.list({ tenant_id: activeTenant.id, is_read: false, size: 1 })
+        ? articleApi.list({ tenant_id: activeTenant.id, size: 1 })
         : null,
     enabled: !!activeTenant,
     refetchInterval: 60_000,
   })
 
-  const unread = data?.total ?? 0
+  const queueCount = data?.total ?? 0
 
   return (
     <nav style={{
@@ -53,13 +55,13 @@ export default function Sidebar() {
         >
           <span style={{ fontSize: 16 }}>{icon}</span>
           <span style={{ flex: 1 }}>{label}</span>
-          {to === '/articles' && unread > 0 && (
+          {to === '/articles' && queueCount > 0 && (
             <span style={{
               background: 'var(--brand-color)', color: '#fff',
               fontSize: 10, fontWeight: 700, padding: '1px 6px',
               borderRadius: 8, minWidth: 18, textAlign: 'center',
             }}>
-              {unread > 99 ? '99+' : unread}
+              {queueCount > 99 ? '99+' : queueCount}
             </span>
           )}
         </NavLink>

@@ -1,5 +1,5 @@
 import client from './client'
-import type { Article, ArticleListResponse } from './types'
+import type { Article, ArticleListResponse, DashboardStats } from './types'
 
 export interface ArticleFilters {
   tenant_id: number
@@ -9,6 +9,7 @@ export interface ArticleFilters {
   from_date?: string
   to_date?: string
   is_read?: boolean
+  archived?: boolean
   page?: number
   size?: number
 }
@@ -24,6 +25,8 @@ export const articleApi = {
   delete: (id: number) => client.delete(`/api/articles/${id}`),
   clearAll: (tenantId: number) =>
     client.delete('/api/articles/', { params: { tenant_id: tenantId } }).then((r) => r.data),
+  reEnrich: (id: number) =>
+    client.post<{ queued: boolean }>(`/api/articles/${id}/re-enrich`).then((r) => r.data),
   enrichmentStatus: (tenantId: number) =>
     client.get<{ total: number; enriched: number; pending: number; paused: boolean; tokens_per_second: number | null; seconds_per_article: number | null }>(
       '/api/articles/enrichment-status', { params: { tenant_id: tenantId } }
@@ -34,4 +37,12 @@ export const articleApi = {
     ).then((r) => r.data),
   stopEnrich: (tenantId: number) =>
     client.post<{ paused: true }>('/api/articles/enrich-stop', null, { params: { tenant_id: tenantId } }).then((r) => r.data),
+  dashboard: (tenantId: number) =>
+    client.get<DashboardStats>('/api/articles/dashboard', { params: { tenant_id: tenantId } }).then((r) => r.data),
+  resetQueue: (tenantId: number) =>
+    client.delete('/api/articles/reset/queue', { params: { tenant_id: tenantId } }).then((r) => r.data),
+  resetArchive: (tenantId: number) =>
+    client.delete('/api/articles/reset/archive', { params: { tenant_id: tenantId } }).then((r) => r.data),
+  resetScrapedUrls: (tenantId: number) =>
+    client.delete('/api/articles/reset/scraped-urls', { params: { tenant_id: tenantId } }).then((r) => r.data),
 }

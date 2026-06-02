@@ -6,6 +6,7 @@ import Badge from '@/components/ui/Badge'
 interface Props {
   article: Article
   onMarkRead?: (id: number) => void
+  onReEnrich?: (id: number) => void
 }
 
 function relevanceStyle(score: number, aiEnriched: boolean): {
@@ -30,7 +31,7 @@ function relevanceStyle(score: number, aiEnriched: boolean): {
   }
 }
 
-export default function ArticleCard({ article, onMarkRead }: Props) {
+export default function ArticleCard({ article, onMarkRead, onReEnrich }: Props) {
   const displayText = article.summary || article.excerpt
   const date = article.published_at || article.scraped_at
   const rel = relevanceStyle(article.relevance_score, article.ai_enriched)
@@ -111,9 +112,24 @@ export default function ArticleCard({ article, onMarkRead }: Props) {
           </p>
         )}
 
-        <div style={{ fontSize: 11, color: '#aaa', marginTop: 'auto' }}>
-          {formatDistanceToNow(new Date(date), { addSuffix: true })}
-          {article.ai_enriched && <span style={{ marginLeft: 8, color: '#9c27b0' }}>✦ AI</span>}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', gap: 8 }}>
+          <span style={{ fontSize: 11, color: '#aaa' }}>
+            {formatDistanceToNow(new Date(date), { addSuffix: true })}
+            {article.ai_enriched && <span style={{ marginLeft: 8, color: '#9c27b0' }}>✦ AI</span>}
+          </span>
+          {onReEnrich && (
+            <button
+              onClick={(e) => { e.preventDefault(); onReEnrich(article.id) }}
+              title="Re-run AI enrichment"
+              style={{
+                background: 'none', border: '1px solid #e0d0f0', cursor: 'pointer',
+                fontSize: 11, color: '#9c27b0', padding: '2px 8px', borderRadius: 4,
+                lineHeight: 1.5, flexShrink: 0,
+              }}
+            >
+              ↺ Re-enrich
+            </button>
+          )}
         </div>
       </div>
     </article>

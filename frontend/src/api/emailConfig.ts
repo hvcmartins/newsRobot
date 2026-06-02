@@ -10,5 +10,7 @@ export const emailApi = {
     client.patch<EmailConfig>(`/api/email-config/${tenantId}`, data).then((r) => r.data),
   testSend: (tenantId: number) =>
     client.post<{ sent_to: string }>(`/api/email-config/${tenantId}/test`).then((r) => r.data),
+  sendNow: (tenantId: number) =>
+    client.post<{ sent: boolean }>(`/api/email-config/${tenantId}/send-now`).then((r) => r.data),
   previewUrl: (tenantId: number) => `/api/email-config/${tenantId}/preview`,
 }

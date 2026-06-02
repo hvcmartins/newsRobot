@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { TenantProvider } from './contexts/TenantContext'
 import AppShell from './components/layout/AppShell'
 import ArticlesPage from './pages/ArticlesPage'
+import ArchivePage from './pages/ArchivePage'
+import DashboardPage from './pages/DashboardPage'
 import SourcesPage from './pages/SourcesPage'
 import SourceLibraryPage from './pages/SourceLibraryPage'
 import EmailPage from './pages/EmailPage'
@@ -18,8 +20,10 @@ export default function App() {
       <TenantProvider>
         <Routes>
           <Route element={<AppShell />}>
-            <Route index element={<Navigate to="/articles" replace />} />
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<DashboardPage />} />
             <Route path="articles" element={<ArticlesPage />} />
+            <Route path="archive" element={<ArchivePage />} />
             <Route path="sources" element={<SourcesPage />} />
             <Route path="source-library" element={<SourceLibraryPage />} />
             <Route path="email" element={<EmailPage />} />

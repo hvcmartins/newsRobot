@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { formatDistanceToNow } from 'date-fns'
 import { useTenant } from '@/contexts/TenantContext'
 import { articleApi } from '@/api/articles'
 import { sourceApi } from '@/api/sources'
@@ -35,6 +36,13 @@ export default function ArticlesPage() {
     refetchInterval: (query) => (query.state.data?.pending ?? 0) > 0 ? 3000 : false,
   })
 
+  const { data: dashboard } = useQuery({
+    queryKey: ['dashboard', tenantId],
+    queryFn: () => articleApi.dashboard(tenantId),
+    enabled: !!tenantId,
+    refetchInterval: 60_000,
+  })
+
   const categories = React.useMemo(() => {
     const cats = new Set((data?.items ?? []).map((a) => a.category).filter(Boolean) as string[])
     return [...cats].sort()
@@ -57,18 +65,6 @@ export default function ArticlesPage() {
     },
   })
 
-  const [confirmClear, setConfirmClear] = useState(false)
-
-  const clearMut = useMutation({
-    mutationFn: () => articleApi.clearAll(tenantId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['articles', tenantId] })
-      qc.invalidateQueries({ queryKey: ['enrichment-status', tenantId] })
-      setConfirmClear(false)
-      scrapeMut.mutate()
-    },
-  })
-
   const [enrichError, setEnrichError] = useState<string | null>(null)
   const enrichMut = useMutation({
     mutationFn: () => articleApi.triggerEnrich(tenantId, false),
@@ -85,12 +81,20 @@ export default function ArticlesPage() {
   })
   const reEnrichMut = useMutation({
     mutationFn: () => articleApi.triggerEnrich(tenantId, true),
-    onSuccess: (data) => {
+    onSuccess: () => {
       setEnrichError(null)
       qc.invalidateQueries({ queryKey: ['enrichment-status', tenantId] })
       qc.invalidateQueries({ queryKey: ['articles', tenantId] })
     },
     onError: (err: Error) => setEnrichError(err.message),
+  })
+
+  const reEnrichSingleMut = useMutation({
+    mutationFn: (id: number) => articleApi.reEnrich(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['articles', tenantId] })
+      qc.invalidateQueries({ queryKey: ['enrichment-status', tenantId] })
+    },
   })
 
   const handleFilterChange = useCallback((f: Filters) => {
@@ -114,31 +118,30 @@ export default function ArticlesPage() {
     : etaSecs < 60 ? `~${etaSecs}s left`
     : `~${Math.ceil(etaSecs / 60)}min left`
 
+  const nextSend = dashboard?.next_send_at
+    ? formatDistanceToNow(new Date(dashboard.next_send_at), { addSuffix: true })
+    : null
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>News Feed</h1>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>News Queue</h1>
+          <p style={{ fontSize: 13, color: '#888', margin: 0 }}>
+            {data?.total != null
+              ? `${data.total} article${data.total !== 1 ? 's' : ''} pending`
+              : 'Pending articles awaiting your next digest'}
+            {nextSend && (
+              <span style={{ marginLeft: 8, color: 'var(--brand-color)', fontWeight: 500 }}>
+                · Next send {nextSend}
+              </span>
+            )}
+          </p>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <Button variant="secondary" size="sm" loading={markAllReadMut.isPending} onClick={() => markAllReadMut.mutate()}>
             Mark all read
           </Button>
-          {confirmClear ? (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: '#c62828' }}>Delete all articles?</span>
-              <Button size="sm" loading={clearMut.isPending}
-                onClick={() => clearMut.mutate()}
-                style={{ background: '#c62828', borderColor: '#c62828' }}>
-                Yes, clear &amp; re-scrape
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => setConfirmClear(false)}>
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <Button variant="secondary" size="sm" onClick={() => setConfirmClear(true)}>
-              🗑 Clear feed
-            </Button>
-          )}
           <Button size="sm" loading={scrapeMut.isPending} onClick={() => scrapeMut.mutate()}>
             🔄 Scrape now
           </Button>
@@ -216,12 +219,7 @@ export default function ArticlesPage() {
         onChange={handleFilterChange}
       />
 
-      {clearMut.isSuccess && (
-        <p style={{ fontSize: 13, color: 'var(--brand-color)', background: 'var(--brand-color-light)', padding: '8px 12px', borderRadius: 6 }}>
-          Feed cleared — scrape triggered, new articles will appear shortly.
-        </p>
-      )}
-      {!clearMut.isSuccess && scrapeMut.isSuccess && (
+      {scrapeMut.isSuccess && (
         <p style={{ fontSize: 13, color: 'var(--brand-color)', background: 'var(--brand-color-light)', padding: '8px 12px', borderRadius: 6 }}>
           Scrape triggered — new articles will appear shortly.
         </p>
@@ -235,6 +233,7 @@ export default function ArticlesPage() {
         total={data?.total ?? 0}
         onPageChange={setPage}
         onMarkRead={(id) => markReadMut.mutate(id)}
+        onReEnrich={(id) => reEnrichSingleMut.mutate(id)}
       />
     </div>
   )

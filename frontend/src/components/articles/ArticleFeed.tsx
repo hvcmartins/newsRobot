@@ -12,6 +12,7 @@ interface Props {
   total: number
   onPageChange: (p: number) => void
   onMarkRead: (id: number) => void
+  onReEnrich?: (id: number) => void
 }
 
 const _UNCATEGORIZED = new Set(['Uncategorized', 'Other', '', undefined, null])
@@ -37,7 +38,7 @@ const grid: React.CSSProperties = {
 }
 
 export default function ArticleFeed({
-  articles, isLoading, page, pages, total, onPageChange, onMarkRead,
+  articles, isLoading, page, pages, total, onPageChange, onMarkRead, onReEnrich,
 }: Props) {
   if (isLoading) {
     return (
@@ -79,18 +80,24 @@ export default function ArticleFeed({
                 borderLeft: '3px solid var(--brand-color)',
                 paddingLeft: 12,
                 marginBottom: 16,
-                fontSize: 11,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '1px',
-                color: 'var(--brand-color)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
               }}>
-                {cat}
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--brand-color)' }}>
+                  {cat}
+                </span>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, background: 'var(--brand-color)', color: '#fff',
+                  padding: '1px 6px', borderRadius: 8, minWidth: 18, textAlign: 'center',
+                }}>
+                  {catArticles.length}
+                </span>
               </div>
             )}
             <div style={grid}>
               {catArticles.map(a => (
-                <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} />
+                <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} />
               ))}
             </div>
           </div>
@@ -104,7 +111,7 @@ export default function ArticleFeed({
     <div>
       <div style={{ ...grid, marginBottom: 24 }}>
         {articles.map(a => (
-          <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} />
+          <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} />
         ))}
       </div>
       {pagination}
