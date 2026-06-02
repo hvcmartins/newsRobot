@@ -163,8 +163,18 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         new_count = 0
         high_priority_new = []
         new_article_ids = []
+        max_age = datetime.timedelta(days=settings.max_article_age_days)
+        now = datetime.datetime.utcnow()
 
         for art in articles:
+            # Skip stale articles (e.g. RSS feeds that include year-old entries)
+            if art.published_at:
+                pub = art.published_at.replace(tzinfo=None)
+                if (now - pub) > max_age:
+                    logger.debug("Skipping old article (%s): '%s'",
+                                 pub.date(), art.title[:70])
+                    continue
+
             # URL deduplication
             existing = (db.query(Article)
                         .filter_by(tenant_id=source.tenant_id, url=art.url)

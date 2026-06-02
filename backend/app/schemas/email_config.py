@@ -15,6 +15,8 @@ class EmailConfigBase(BaseModel):
     recipients_json: str = "[]"
     frequency: EmailFrequency = EmailFrequency.daily
     send_time: str = "08:00"
+    lookback_hours: int = 24
+    schedule_overrides: Optional[str] = None  # JSON: {"monday": 72, ...}
     subject_template: str = "{{tenant_name}} News Digest – {{date}}"
     intro_text: Optional[str] = None
     is_active: bool = True
@@ -34,6 +36,8 @@ class EmailConfigUpdate(BaseModel):
     recipients_json: Optional[str] = None
     frequency: Optional[EmailFrequency] = None
     send_time: Optional[str] = None
+    lookback_hours: Optional[int] = None
+    schedule_overrides: Optional[str] = None
     subject_template: Optional[str] = None
     intro_text: Optional[str] = None
     is_active: Optional[bool] = None

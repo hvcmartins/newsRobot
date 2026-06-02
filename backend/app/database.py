@@ -50,6 +50,8 @@ def _migrate():
     _add_column_if_missing("articles", "ai_enriched", "BOOLEAN DEFAULT 0")
     _add_column_if_missing("tenants", "topic_profile", "TEXT")
     _add_column_if_missing("tenants", "ai_categories", "TEXT")
+    _add_column_if_missing("email_configs", "lookback_hours", "INTEGER DEFAULT 24")
+    _add_column_if_missing("email_configs", "schedule_overrides", "TEXT")
     _fix_empty_slugs()
 
 

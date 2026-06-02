@@ -25,6 +25,8 @@ class EmailConfig(Base):
     recipients_json = Column(Text, nullable=False, default="[]")
     frequency = Column(Enum(EmailFrequency), default=EmailFrequency.daily)
     send_time = Column(String(5), default="08:00")
+    lookback_hours = Column(Integer, default=24, nullable=False)
+    schedule_overrides = Column(Text, nullable=True)  # JSON: {"monday": 72, ...}
     subject_template = Column(String(500),
                                default="{{tenant_name}} News Digest – {{date}}")
     intro_text = Column(Text, nullable=True)

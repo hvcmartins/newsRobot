@@ -72,6 +72,8 @@ export interface EmailConfig {
   recipients_json: string
   frequency: 'immediate' | 'daily' | 'weekly'
   send_time: string
+  lookback_hours: number
+  schedule_overrides: string | null  // JSON: {"monday": 72, ...}
   subject_template: string
   intro_text: string | null
   is_active: boolean

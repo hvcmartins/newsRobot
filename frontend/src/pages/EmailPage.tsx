@@ -8,6 +8,69 @@ import Input from '@/components/ui/Input'
 
 type Freq = 'immediate' | 'daily' | 'weekly'
 
+const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
+const DAY_LABEL: Record<string, string> = {
+  monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu',
+  friday: 'Fri', saturday: 'Sat', sunday: 'Sun',
+}
+
+function DigestWindowSection({ form, set }: { form: Partial<EmailConfig>; set: (p: Partial<EmailConfig>) => void }) {
+  const overrides: Record<string, number> = (() => {
+    try { return JSON.parse(form.schedule_overrides ?? '{}') } catch { return {} }
+  })()
+
+  const setOverride = (day: string, val: string) => {
+    const next = { ...overrides }
+    if (val === '' || val === '0') {
+      delete next[day]
+    } else {
+      const n = parseInt(val, 10)
+      if (!isNaN(n) && n > 0) next[day] = n
+    }
+    set({ schedule_overrides: Object.keys(next).length ? JSON.stringify(next) : null })
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Digest Window</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input
+          type="number" min={1} max={720}
+          value={form.lookback_hours ?? 24}
+          onChange={(e) => set({ lookback_hours: Math.max(1, parseInt(e.target.value) || 24) })}
+          style={{ width: 64, padding: '5px 8px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }}
+        />
+        <span style={{ fontSize: 13, color: '#666' }}>hours per digest (default for all days)</span>
+      </div>
+      <p style={{ fontSize: 11, color: '#999', margin: 0 }}>
+        Override specific days — useful for Monday covering the weekend (72 h = Fri + Sat + Sun).
+        Leave blank to use the default.
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {WEEKDAYS.map((day) => (
+          <div key={day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+            <span style={{ fontSize: 11, color: '#777', fontWeight: 500 }}>{DAY_LABEL[day]}</span>
+            <input
+              type="number" min={1} max={720} placeholder="—"
+              value={overrides[day] ?? ''}
+              onChange={(e) => setOverride(day, e.target.value)}
+              style={{
+                width: 52, padding: '4px 6px', border: '1px solid #ddd', borderRadius: 6,
+                fontSize: 12, textAlign: 'center',
+                background: overrides[day] ? '#f0f4ff' : '#fff',
+                borderColor: overrides[day] ? '#c7d8fb' : '#ddd',
+              }}
+            />
+            {overrides[day] && (
+              <span style={{ fontSize: 10, color: '#3a5fbb' }}>{overrides[day]}h</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function EmailPage() {
   const { activeTenant } = useTenant()
   const qc = useQueryClient()
@@ -23,6 +86,7 @@ export default function EmailPage() {
     smtp_host: '', smtp_port: 587, smtp_user: '', smtp_password: '',
     from_email: '', from_name: 'News Robot',
     recipients_json: '[]', frequency: 'daily', send_time: '08:00',
+    lookback_hours: 24, schedule_overrides: '{"monday":72}',
     subject_template: '{{tenant_name}} News Digest – {{date}}',
     intro_text: '', is_active: true,
   })
@@ -113,6 +177,9 @@ export default function EmailPage() {
               </div>
               <Input label="Send Time (UTC)" type="time" value={form.send_time ?? '08:00'} onChange={(e) => set({ send_time: e.target.value })} />
             </div>
+
+            {/* Digest Window — lookback hours + per-day overrides */}
+            {form.frequency !== 'immediate' && <DigestWindowSection form={form} set={set} />}
 
             <Input label="Subject Template" value={form.subject_template ?? ''} onChange={(e) => set({ subject_template: e.target.value })}
               placeholder="{{tenant_name}} News Digest – {{date}}" />

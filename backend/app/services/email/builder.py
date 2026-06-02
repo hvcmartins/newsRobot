@@ -31,15 +31,23 @@ def build_email_context(tenant_id: int, articles: list | None,
         recipients = json.loads(config.recipients_json or "[]") if config else []
 
     if articles is None:
-        cutoff = {
-            "daily":  datetime.datetime.utcnow() - datetime.timedelta(days=1),
-            "weekly": datetime.datetime.utcnow() - datetime.timedelta(days=7),
-        }.get(frequency)
+        # Base lookback in hours: use config value, fall back to frequency defaults
+        default_hours = (config.lookback_hours if config and config.lookback_hours
+                         else {"daily": 24, "weekly": 168}.get(frequency, 24))
+
+        # Per-weekday override (e.g. Monday covers Fri+Sat+Sun → 72 h)
+        hours = default_hours
+        if config and config.schedule_overrides:
+            overrides = json.loads(config.schedule_overrides or "{}")
+            weekday = datetime.datetime.utcnow().strftime("%A").lower()
+            hours = int(overrides.get(weekday, default_hours))
+
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
 
         query = (db.query(Article)
                  .filter(Article.tenant_id == tenant_id,
                          Article.duplicate_of_id.is_(None)))
-        if cutoff:
+        if frequency != "immediate":
             query = query.filter(Article.scraped_at >= cutoff)
         articles = (query
                     .order_by(Article.relevance_score.desc(),
