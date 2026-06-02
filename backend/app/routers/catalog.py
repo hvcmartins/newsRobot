@@ -1,7 +1,9 @@
 import logging
+import uuid
+import datetime as _dt
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -13,6 +15,12 @@ from app.schemas.catalog_source import (CatalogSourceCreate, CatalogSourceRead,
 from app.schemas.source import SourceRead
 
 router = APIRouter()
+
+# ── In-memory discovery job store ─────────────────────────────────────────────
+# Keeps the last 50 jobs. Each entry: {status, sources?, error?, started_at}
+_discovery_jobs: dict[str, dict] = {}
+
+_MAX_JOBS = 50
 
 
 # ── Static-path routes first ─────────────────────────────────────────────────
@@ -111,10 +119,96 @@ def _check_url(url: str) -> tuple[bool, str | None]:
     return False, None
 
 
+def _run_discovery_job(job_id: str, tenant_id: int, topic_profile: str,
+                       tenant_name: str) -> None:
+    """Background worker — runs AI discovery + web search + URL validation."""
+    from app.database import SessionLocal
+    from app.services.ai.factory import get_ai_provider, pause_enrichment, resume_enrichment
+
+    pause_enrichment()
+    db = SessionLocal()
+    try:
+        suggestions: list[dict] = []
+        ai_error: Exception | None = None
+
+        ai = get_ai_provider(db)
+        try:
+            suggestions = ai.discover_sources(topic_profile)
+        except Exception as exc:
+            logger.error("AI source discovery failed: %s", exc)
+            ai_error = exc
+
+        # Augment with web search (failure is acceptable)
+        try:
+            from app.services.feed_search import web_search_feeds
+            web_feeds = web_search_feeds(topic_profile)
+            ai_urls = {s["url"] for s in suggestions}
+            new_from_web = [f for f in web_feeds if f["url"] not in ai_urls]
+            if new_from_web:
+                logger.info("Web search added %d sources for '%s'", len(new_from_web), tenant_name)
+                suggestions = suggestions + new_from_web
+        except Exception as exc:
+            logger.warning("Web feed search failed (non-critical): %s", exc)
+
+        if not suggestions:
+            if ai_error:
+                _discovery_jobs[job_id] = {"status": "error",
+                                           "error": f"AI source discovery failed: {ai_error}"}
+            else:
+                _discovery_jobs[job_id] = {"status": "done", "sources": []}
+            return
+
+        # URL validation in parallel
+        tenant_source_urls = {s.url for s in db.query(Source).filter_by(tenant_id=tenant_id).all()}
+        catalog_urls = {c.url for c in db.query(CatalogSource).all()}
+
+        with ThreadPoolExecutor(max_workers=min(len(suggestions), 10)) as pool:
+            futures = {pool.submit(_check_url, s["url"]): i for i, s in enumerate(suggestions)}
+            check_results: dict[int, tuple[bool, str | None]] = {}
+            try:
+                for future in as_completed(futures, timeout=20):
+                    idx = futures[future]
+                    try:
+                        check_results[idx] = future.result()
+                    except Exception:
+                        check_results[idx] = (False, None)
+            except FuturesTimeout:
+                logger.warning("URL validation timed out; %d/%d completed",
+                               len(check_results), len(futures))
+                for idx in futures.values():
+                    check_results.setdefault(idx, (False, None))
+
+        result = []
+        for i, s in enumerate(suggestions):
+            ok, corrected_url = check_results.get(i, (False, None))
+            url = corrected_url or s["url"]
+            result.append({
+                **s,
+                "url": url,
+                "reachable": ok,
+                "already_in_feed": url in tenant_source_urls or s["url"] in tenant_source_urls,
+                "in_catalog": url in catalog_urls or s["url"] in catalog_urls,
+                "url_corrected": corrected_url is not None,
+            })
+
+        result.sort(key=lambda x: (0 if x["reachable"] else 1))
+        logger.info("Source discovery: %d reachable / %d total for '%s'",
+                    sum(1 for s in result if s["reachable"]), len(result), tenant_name)
+        _discovery_jobs[job_id] = {"status": "done", "sources": result}
+
+    except Exception as exc:
+        logger.error("Discovery job %s crashed: %s", job_id, exc)
+        _discovery_jobs[job_id] = {"status": "error", "error": str(exc)}
+    finally:
+        db.close()
+        resume_enrichment()
+
+
 @router.post("/discover")
-def discover_sources(tenant_id: int, db: Session = Depends(get_db)):
-    """Ask the AI to suggest new sources matching the tenant's topic profile.
-    Validates each suggested URL in parallel and returns reachability status."""
+def discover_sources(tenant_id: int, background_tasks: BackgroundTasks,
+                     db: Session = Depends(get_db)):
+    """Start an async source discovery job. Returns a job_id immediately.
+    Poll GET /discover?job_id=<id> for status/results."""
     from app.models import Tenant
     tenant = db.get(Tenant, tenant_id)
     if not tenant:
@@ -124,77 +218,37 @@ def discover_sources(tenant_id: int, db: Session = Depends(get_db)):
 
     from app.services.ai.factory import get_ai_provider
     from app.services.ai.null import NullProvider
-    ai = get_ai_provider()
-    if isinstance(ai, NullProvider):
+    if isinstance(get_ai_provider(), NullProvider):
         raise HTTPException(400, "Configure an AI provider in AI Settings to use source discovery.")
 
-    logger.info("Source discovery requested for '%s'", tenant.name)
+    job_id = uuid.uuid4().hex[:12]
+    _discovery_jobs[job_id] = {
+        "status": "running",
+        "started_at": _dt.datetime.utcnow().isoformat(),
+    }
 
-    ai_error: Exception | None = None
-    try:
-        suggestions = ai.discover_sources(tenant.topic_profile)
-    except Exception as exc:
-        logger.error("AI source discovery failed: %s", exc)
-        ai_error = exc
-        suggestions = []
+    # Evict oldest jobs beyond the cap
+    if len(_discovery_jobs) > _MAX_JOBS:
+        oldest = sorted(_discovery_jobs, key=lambda k: _discovery_jobs[k].get("started_at", ""))[
+            :len(_discovery_jobs) - _MAX_JOBS
+        ]
+        for k in oldest:
+            _discovery_jobs.pop(k, None)
 
-    # Augment with real internet search (non-blocking — failure is acceptable)
-    try:
-        from app.services.feed_search import web_search_feeds
-        web_feeds = web_search_feeds(tenant.topic_profile)
-        ai_urls = {s["url"] for s in suggestions}
-        new_from_web = [f for f in web_feeds if f["url"] not in ai_urls]
-        if new_from_web:
-            logger.info("Web search added %d sources for '%s'", len(new_from_web), tenant.name)
-            suggestions = suggestions + new_from_web
-    except Exception as exc:
-        logger.warning("Web feed search failed (non-critical): %s", exc)
+    logger.info("Source discovery job %s started for '%s'", job_id, tenant.name)
+    background_tasks.add_task(
+        _run_discovery_job, job_id, tenant_id, tenant.topic_profile, tenant.name
+    )
+    return {"job_id": job_id, "status": "running"}
 
-    if not suggestions:
-        if ai_error:
-            raise HTTPException(500, f"AI source discovery failed: {ai_error}")
-        return {"sources": []}
 
-    # Validate URLs in parallel (max 8 seconds total)
-    tenant_source_urls = {s.url for s in db.query(Source).filter_by(tenant_id=tenant_id).all()}
-    catalog_urls = {c.url for c in db.query(CatalogSource).all()}
-
-    with ThreadPoolExecutor(max_workers=min(len(suggestions), 10)) as pool:
-        futures = {pool.submit(_check_url, s["url"]): i for i, s in enumerate(suggestions)}
-        check_results: dict[int, tuple[bool, str | None]] = {}
-        try:
-            for future in as_completed(futures, timeout=20):
-                idx = futures[future]
-                try:
-                    check_results[idx] = future.result()
-                except Exception:
-                    check_results[idx] = (False, None)
-        except FuturesTimeout:
-            # Some URL checks didn't finish in time — mark outstanding as unreachable
-            logger.warning("URL validation timed out; %d/%d completed",
-                           len(check_results), len(futures))
-            for idx in futures.values():
-                check_results.setdefault(idx, (False, None))
-
-    result = []
-    for i, s in enumerate(suggestions):
-        ok, corrected_url = check_results.get(i, (False, None))
-        url = corrected_url or s["url"]
-        result.append({
-            **s,
-            "url": url,
-            "reachable": ok,
-            "already_in_feed": url in tenant_source_urls or s["url"] in tenant_source_urls,
-            "in_catalog": url in catalog_urls or s["url"] in catalog_urls,
-            "url_corrected": corrected_url is not None,
-        })
-
-    # Reachable sources first, then offline — within each group keep original order
-    result.sort(key=lambda s: (0 if s["reachable"] else 1))
-
-    logger.info("Source discovery: %d reachable / %d total for '%s'",
-                sum(1 for s in result if s["reachable"]), len(result), tenant.name)
-    return {"sources": result}
+@router.get("/discover")
+def get_discover_status(job_id: str):
+    """Poll discovery job status. Returns {status, sources?} or {status, error?}."""
+    job = _discovery_jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Discovery job not found or expired")
+    return job
 
 
 @router.post("/discover/add", response_model=SourceRead, status_code=201)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTenant } from '@/contexts/TenantContext'
 import { catalogApi, type DiscoveredSource } from '@/api/catalog'
@@ -11,29 +11,50 @@ import Spinner from '@/components/ui/Spinner'
 function DiscoverPanel({ tenantId }: { tenantId: number }) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
   const [results, setResults] = useState<DiscoveredSource[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [addingUrl, setAddingUrl] = useState<string | null>(null)
   const [addedUrls, setAddedUrls] = useState<Set<string>>(new Set())
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const discoverMutation = useMutation({
-    mutationFn: () => catalogApi.discover(tenantId),
-    onSuccess: (data) => {
-      setResults(data.sources)
-      setError(null)
-    },
-    onError: (e: unknown) => {
-      setError(e instanceof Error ? e.message : 'Discovery failed')
-      setResults(null)
-    },
-  })
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }
 
-  const handleDiscover = () => {
+  const handleDiscover = async () => {
+    stopPolling()
     setOpen(true)
     setResults(null)
     setError(null)
-    discoverMutation.mutate()
+    setRunning(true)
+    setJobId(null)
+    try {
+      const data = await catalogApi.discoverStart(tenantId)
+      setJobId(data.job_id)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Discovery failed')
+      setRunning(false)
+    }
   }
+
+  useEffect(() => {
+    if (!jobId) return
+    pollRef.current = setInterval(async () => {
+      try {
+        const data = await catalogApi.discoverPoll(jobId)
+        if (data.status === 'done') {
+          stopPolling(); setResults(data.sources ?? []); setRunning(false)
+        } else if (data.status === 'error') {
+          stopPolling(); setError(data.error ?? 'Discovery failed'); setRunning(false)
+        }
+      } catch (e: unknown) {
+        stopPolling(); setError(e instanceof Error ? e.message : 'Poll failed'); setRunning(false)
+      }
+    }, 3000)
+    return stopPolling
+  }, [jobId])
 
   const handleAdd = async (src: DiscoveredSource) => {
     setAddingUrl(src.url)
@@ -71,17 +92,17 @@ function DiscoverPanel({ tenantId }: { tenantId: number }) {
         <Button
           variant="primary"
           size="sm"
-          loading={discoverMutation.isPending}
+          loading={running}
           onClick={handleDiscover}
-          disabled={discoverMutation.isPending}
+          disabled={running}
         >
-          {discoverMutation.isPending ? 'Discovering…' : open ? 'Rediscover' : 'Discover'}
+          {running ? 'Discovering…' : open ? 'Rediscover' : 'Discover'}
         </Button>
       </div>
 
       {open && (
         <div style={{ marginTop: 16 }}>
-          {discoverMutation.isPending && (
+          {running && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#5a7fa8', fontSize: 13 }}>
               <Spinner size={18} />
               <span>AI is searching for sources matching your profile…</span>

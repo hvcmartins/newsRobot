@@ -1,10 +1,35 @@
 import logging
+import threading
 from .base import AIProvider
 from .null import NullProvider
 
 logger = logging.getLogger(__name__)
 
 _provider: AIProvider | None = None
+
+# ── Discovery pause flag ───────────────────────────────────────────────────────
+# Set by catalog discovery jobs so background enrichment yields the model.
+# Initially "set" (= AI is free). Enrichment workers call wait() before
+# making AI calls and block until discovery finishes.
+_ai_free = threading.Event()
+_ai_free.set()
+
+
+def pause_enrichment():
+    """Signal that discovery is using the model — enrichment should wait."""
+    _ai_free.clear()
+    logger.info("AI model claimed by source discovery — enrichment paused")
+
+
+def resume_enrichment():
+    """Release the model back to enrichment workers."""
+    _ai_free.set()
+    logger.info("Source discovery done — enrichment resumed")
+
+
+def wait_for_ai(timeout: float = 600.0) -> bool:
+    """Block until the AI is free (or timeout). Returns True if free, False if timed out."""
+    return _ai_free.wait(timeout=timeout)
 
 _DEFAULT_MODELS = {
     "claude":     "claude-haiku-4-5-20251001",

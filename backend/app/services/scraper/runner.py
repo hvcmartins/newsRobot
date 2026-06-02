@@ -56,8 +56,12 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
     ai_log = _logging.getLogger("app.services.ai.enrichment")
 
     from app.database import SessionLocal
-    from app.services.ai.factory import get_ai_provider
+    from app.services.ai.factory import get_ai_provider, wait_for_ai
     from app.services.ai.null import NullProvider
+
+    # Yield if source discovery is currently using the model
+    if not wait_for_ai(timeout=600):
+        ai_log.info("Discovery held the AI for 10 min — proceeding anyway")
 
     db = SessionLocal()
     try:

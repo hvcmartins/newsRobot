@@ -28,12 +28,18 @@ export const catalogApi = {
         `/api/catalog/${catalogId}/in-tenant/${tenantId}`
       )
       .then((r) => r.data),
-  discover: (tenantId: number) =>
+  discoverStart: (tenantId: number) =>
     client
-      .post<{ sources: DiscoveredSource[] }>('/api/catalog/discover', null, {
+      .post<{ job_id: string; status: string }>('/api/catalog/discover', null, {
         params: { tenant_id: tenantId },
-        timeout: 180_000,  // local models can be slow — allow up to 3 min
       })
+      .then((r) => r.data),
+  discoverPoll: (jobId: string) =>
+    client
+      .get<{ status: string; sources?: DiscoveredSource[]; error?: string }>(
+        '/api/catalog/discover',
+        { params: { job_id: jobId } }
+      )
       .then((r) => r.data),
   addDiscovered: (tenantId: number, source: Pick<DiscoveredSource, 'name' | 'url' | 'type' | 'category' | 'description'>) =>
     client

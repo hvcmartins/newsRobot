@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTenant } from '@/contexts/TenantContext'
@@ -10,20 +10,63 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import Spinner from '@/components/ui/Spinner'
 
+const POLL_INTERVAL_MS = 3000
+
 function AIDiscoverDrawer({ tenantId, onClose }: { tenantId: number; onClose: () => void }) {
   const qc = useQueryClient()
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
   const [results, setResults] = useState<DiscoveredSource[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [addingUrl, setAddingUrl] = useState<string | null>(null)
   const [addedUrls, setAddedUrls] = useState<Set<string>>(new Set())
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const discoverMut = useMutation({
-    mutationFn: () => catalogApi.discover(tenantId),
-    onSuccess: (data) => { setResults(data.sources); setError(null) },
-    onError: (e: unknown) => { setError(e instanceof Error ? e.message : 'Discovery failed'); setResults(null) },
-  })
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }
 
-  React.useEffect(() => { discoverMut.mutate() }, [])  // auto-run on open
+  const startDiscovery = async () => {
+    stopPolling()
+    setResults(null)
+    setError(null)
+    setRunning(true)
+    setJobId(null)
+    try {
+      const data = await catalogApi.discoverStart(tenantId)
+      setJobId(data.job_id)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Discovery failed')
+      setRunning(false)
+    }
+  }
+
+  // Start polling once we have a job_id
+  useEffect(() => {
+    if (!jobId) return
+    pollRef.current = setInterval(async () => {
+      try {
+        const data = await catalogApi.discoverPoll(jobId)
+        if (data.status === 'done') {
+          stopPolling()
+          setResults(data.sources ?? [])
+          setRunning(false)
+        } else if (data.status === 'error') {
+          stopPolling()
+          setError(data.error ?? 'Discovery failed')
+          setRunning(false)
+        }
+      } catch (e: unknown) {
+        stopPolling()
+        setError(e instanceof Error ? e.message : 'Poll failed')
+        setRunning(false)
+      }
+    }, POLL_INTERVAL_MS)
+    return stopPolling
+  }, [jobId])
+
+  // Auto-start on open
+  useEffect(() => { startDiscovery() }, [])
 
   const handleAdd = async (src: DiscoveredSource) => {
     setAddingUrl(src.url)
@@ -54,8 +97,8 @@ function AIDiscoverDrawer({ tenantId, onClose }: { tenantId: number; onClose: ()
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {!discoverMut.isPending && (
-            <Button variant="secondary" size="sm" onClick={() => { setResults(null); setError(null); discoverMut.mutate() }}>
+          {!running && (
+            <Button variant="secondary" size="sm" onClick={startDiscovery}>
               Retry
             </Button>
           )}
@@ -63,10 +106,10 @@ function AIDiscoverDrawer({ tenantId, onClose }: { tenantId: number; onClose: ()
         </div>
       </div>
 
-      {discoverMut.isPending && (
+      {running && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#5a7fa8', fontSize: 13, padding: '16px 0' }}>
           <Spinner size={20} />
-          <span>AI is analysing your profile and searching for sources…</span>
+          <span>AI is analysing your profile and searching for sources… (enrichment paused while searching)</span>
         </div>
       )}
 
