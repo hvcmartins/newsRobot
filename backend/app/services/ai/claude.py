@@ -1,6 +1,9 @@
 import json
 import logging
-from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, RELEVANCE_PROMPT_RICH, normalise_discovered
+from .base import (AIProvider, RelevanceResult,
+                   RELEVANCE_SYSTEM_TPL, RELEVANCE_USER_TPL,
+                   DISCOVER_SYSTEM, DISCOVER_USER_TPL,
+                   normalise_discovered)
 
 logger = logging.getLogger(__name__)
 
@@ -16,16 +19,23 @@ class ClaudeProvider(AIProvider):
         self._client = anthropic.Anthropic(api_key=api_key)
         self._model = model
 
-    def _ask(self, prompt: str, max_tokens: int = 512) -> str:
-        msg = self._client.messages.create(
+    def _ask(self, prompt: str, max_tokens: int = 512,
+             system: str | None = None) -> str:
+        kwargs: dict = dict(
             model=self._model,
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
+        if system:
+            # Cache the system block — when scoring many articles against the
+            # same profile the model reuses the cached context (90% cost saving).
+            kwargs["system"] = [{"type": "text", "text": system,
+                                 "cache_control": {"type": "ephemeral"}}]
+        msg = self._client.messages.create(**kwargs)
         return msg.content[0].text.strip()
 
-    def _ask_array(self, prompt: str) -> list:
-        raw = self._ask(prompt, max_tokens=2048)
+    def _ask_array(self, prompt: str, system: str | None = None) -> list:
+        raw = self._ask(prompt, max_tokens=2048, system=system)
         try:
             start = raw.index("[")
             end = raw.rindex("]") + 1
@@ -34,8 +44,8 @@ class ClaudeProvider(AIProvider):
             logger.warning("Failed to parse JSON array from Claude: %s", raw[:300])
             raise ValueError("Could not parse source list from Claude response") from exc
 
-    def _ask_json(self, prompt: str) -> dict:
-        raw = self._ask(prompt)
+    def _ask_json(self, prompt: str, system: str | None = None) -> dict:
+        raw = self._ask(prompt, system=system)
         try:
             start = raw.index("{")
             end = raw.rindex("}") + 1
@@ -45,23 +55,22 @@ class ClaudeProvider(AIProvider):
             raise ValueError(f"Invalid JSON from AI: {raw}") from exc
 
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
-        prompt = RELEVANCE_PROMPT_RICH.format(
-            topic_profile=topic_profile,
+        system = RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile)
+        user = RELEVANCE_USER_TPL.format(
             title=title,
             excerpt=(excerpt or "(none)")[:1500],
         )
-        data = self._ask_json(prompt)
+        data = self._ask_json(user, system=system)
         return RelevanceResult(
             score=max(0.0, min(1.0, float(data.get("score", 0.5)))),
             reason=str(data.get("reason", data.get("thinking", ""))),
         )
 
     def summarize(self, title, excerpt) -> str:
-        prompt = (
-            f"Summarize this news article in 2-3 concise sentences. "
-            f"Be factual and neutral.\n\nTitle: {title}\nExcerpt: {excerpt or '(none)'}"
+        return self._ask(
+            f"Summarize this news article in 2-3 concise, factual sentences.\n\n"
+            f"Title: {title}\nExcerpt: {excerpt or '(none)'}"
         )
-        return self._ask(prompt)
 
     def categorize(self, title, excerpt, categories) -> str:
         cats = categories or _CATEGORIES
@@ -96,7 +105,8 @@ class ClaudeProvider(AIProvider):
         return [str(k) for k in data.get("keywords", [])]
 
     def discover_sources(self, topic_profile) -> list[dict]:
-        return normalise_discovered(self._ask_array(DISCOVER_PROMPT.format(topic_profile=topic_profile)))
+        user = DISCOVER_USER_TPL.format(topic_profile=topic_profile)
+        return normalise_discovered(self._ask_array(user, system=DISCOVER_SYSTEM))
 
     def recommend_sources(self, topic_profile, catalog) -> list[int]:
         if not catalog:

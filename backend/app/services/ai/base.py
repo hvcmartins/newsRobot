@@ -3,26 +3,18 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 
-# Rich relevance prompt for capable models (Claude, GPT-4, large Ollama).
-# Forces chain-of-thought reasoning before scoring and anchors the scale.
-RELEVANCE_PROMPT_RICH = """\
+# ── Relevance scoring prompts ─────────────────────────────────────────────────
+# Split into system (stable: profile + rubric) and user (variable: article).
+# The system part is sent as a cacheable system message in capable providers,
+# so scoring many articles against the same profile reuses the cached context.
+
+RELEVANCE_SYSTEM_TPL = """\
 You are a relevance classifier for a corporate news monitoring system.
 
 ## Company Profile
 {topic_profile}
 
-## Article
-Title: {title}
-Excerpt: {excerpt}
-
-## Task
-Decide how relevant this article is to the company described above.
-
-Step 1 – Identify connections: which specific topics, regions, organisations, \
-or industries from the profile does this article touch? If nothing matches, \
-write "none".
-
-Step 2 – Score using this calibrated scale:
+## Scoring Scale
   0.9–1.0  Core business — directly about their industry, key markets, \
 regulators, major clients, or named organisations in the profile
   0.7–0.8  Useful intelligence — relevant market trends, competitor moves, \
@@ -33,31 +25,39 @@ worth knowing but not actionable
   0.0      No connection at all
 
 Be strict: most articles should score below 0.5 unless they clearly match \
-something specific in the profile.
+something specific in the profile."""
 
-Return JSON only — no markdown, no extra text:
-{{"thinking": "<one sentence: what the article is about + which profile area it touches>", \
-"score": 0.0, "reason": "<one sentence justification for the score>"}}"""
+RELEVANCE_USER_TPL = """\
+Article to evaluate:
+Title: {title}
+Excerpt: {excerpt}
+
+Step 1 – Which specific topics, regions, or organisations from the profile \
+does this article touch? If nothing, write "none".
+Step 2 – Score it using the scale above.
+
+Return JSON only:
+{{"thinking": "<what this article is about + which profile area it touches>", \
+"score": 0.0, "reason": "<one sentence justification>"}}"""
 
 
-# Shared prompt used by every provider for source discovery.
-DISCOVER_PROMPT = """\
-You are a news research expert. Based on the company profile below, suggest \
-12-15 reliable news sources the company should monitor.
+# ── Source discovery prompts ───────────────────────────────────────────────────
+# Split into system (stable instructions) and user (per-tenant profile).
 
-Important rules:
+DISCOVER_SYSTEM = """\
+You are a news research expert. Suggest 12-15 reliable news sources for the \
+company profile you will receive.
+
+Rules:
 - Cover EVERY major topic section in the profile — not just the most prominent one.
-- Only suggest sources that genuinely publish on the stated topic.
-- Prefer RSS/Atom feed URLs over homepages. Use real, working feed URLs from \
-memory (e.g. https://techcrunch.com/feed/, \
+- Only suggest sources that genuinely publish on those topics.
+- Prefer RSS/Atom feed URLs over homepages. Use real, working feed URLs you \
+know (e.g. https://techcrunch.com/feed/, \
 https://feeds.reuters.com/reuters/businessNews, \
 https://feeds.bbci.co.uk/news/world/rss.xml).
 - Do NOT invent URLs — if unsure of the exact feed path, use the homepage URL \
 and set type to "scrape".
 - Aim for diversity: different publishers, different countries, different formats.
-
-Company profile:
-{topic_profile}
 
 Return ONLY a JSON array — no surrounding text, no markdown fences.
 Each element must have exactly these keys:
@@ -70,10 +70,14 @@ Science, Health, Sports, World News, Environment, Other
   reason      (string)  – one sentence on why it matches this specific profile
 
 Example element:
-{{"name":"Reuters Business","url":"https://feeds.reuters.com/reuters/businessNews",\
+{"name":"Reuters Business","url":"https://feeds.reuters.com/reuters/businessNews",\
 "type":"rss","category":"Finance","description":"Global business news",\
-"reason":"Covers financial markets relevant to the company"}}
-"""
+"reason":"Covers financial markets relevant to the company"}"""
+
+DISCOVER_USER_TPL = "Company profile:\n{topic_profile}\n\nSuggest the sources now."
+
+# Keep the combined prompt for any legacy / one-shot usage.
+DISCOVER_PROMPT = DISCOVER_SYSTEM + "\n\nCompany profile:\n{topic_profile}\n\nSuggest the sources now."
 
 # Shorter prompt for local (constrained-context) models — fewer items,
 # explicit curly-brace rule, and a worked example.

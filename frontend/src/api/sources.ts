@@ -1,6 +1,13 @@
 import client from './client'
 import type { Source } from './types'
 
+export interface SourceCheckResult {
+  id: number
+  online: boolean
+  http_status?: number
+  error?: string
+}
+
 export const sourceApi = {
   list: (tenantId: number) =>
     client.get<Source[]>('/api/sources/', { params: { tenant_id: tenantId } }).then((r) => r.data),
@@ -12,5 +19,9 @@ export const sourceApi = {
   test: (id: number) =>
     client.post<{ source_name: string; articles_found: number; sample: unknown[] }>(
       `/api/sources/${id}/test`
+    ).then((r) => r.data),
+  checkAll: (tenantId: number) =>
+    client.post<{ results: SourceCheckResult[] }>(
+      '/api/sources/check-all', null, { params: { tenant_id: tenantId } }
     ).then((r) => r.data),
 }

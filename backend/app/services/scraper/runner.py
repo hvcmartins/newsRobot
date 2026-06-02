@@ -73,14 +73,8 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
         title_short = article.title[:70]
         ai_log.info("Enriching: '%s'", title_short)
 
-        # Summary
-        try:
-            article.summary = ai.summarize(article.title, article.excerpt or "")
-            ai_log.info("Summary done: '%s'", title_short)
-        except Exception as exc:
-            ai_log.warning("Summary failed for '%s': %s", title_short, exc)
-
-        # Relevance — requires a topic profile to be meaningful
+        # Step 1: Relevance check — run first so irrelevant articles are
+        # discarded before spending tokens on summary or category.
         if topic_profile:
             try:
                 result = ai.score_relevance(article.title, article.excerpt or "",
@@ -90,9 +84,6 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
                             f" ({result.reason})" if result.reason else "")
 
                 if result.score < 0.5:
-                    # Article is not relevant to this tenant's profile — discard it.
-                    # Use a bulk-delete query to avoid session-state conflicts from
-                    # the pending summary change above.
                     db.query(Article).filter(Article.id == article_id).delete()
                     db.commit()
                     ai_log.info("Deleted low-relevance article (%.2f): '%s'",
@@ -104,7 +95,14 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
             except Exception as exc:
                 ai_log.warning("Relevance scoring failed for '%s': %s", title_short, exc)
 
-        # Category
+        # Step 2: Summary (only reached for relevant articles)
+        try:
+            article.summary = ai.summarize(article.title, article.excerpt or "")
+            ai_log.info("Summary done: '%s'", title_short)
+        except Exception as exc:
+            ai_log.warning("Summary failed for '%s': %s", title_short, exc)
+
+        # Step 3: Category
         try:
             article.category = ai.categorize(article.title, article.excerpt or "", [])
             ai_log.info("Category: %s — '%s'", article.category, title_short)

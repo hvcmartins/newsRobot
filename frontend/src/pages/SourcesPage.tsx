@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTenant } from '@/contexts/TenantContext'
-import { sourceApi } from '@/api/sources'
+import { sourceApi, type SourceCheckResult } from '@/api/sources'
 import { catalogApi, type DiscoveredSource } from '@/api/catalog'
 import SourceList from '@/components/sources/SourceList'
 import SourceForm from '@/components/sources/SourceForm'
@@ -144,6 +144,8 @@ export default function SourcesPage() {
   const qc = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
   const [showDiscover, setShowDiscover] = useState(false)
+  const [checkResults, setCheckResults] = useState<Map<number, SourceCheckResult> | null>(null)
+  const [checkingAll, setCheckingAll] = useState(false)
   const tenantId = activeTenant?.id ?? 0
 
   const { data: sources = [], isLoading } = useQuery({
@@ -157,6 +159,21 @@ export default function SourcesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sources', tenantId] }),
   })
 
+  const handleCheckAll = async () => {
+    setCheckingAll(true)
+    setCheckResults(new Map())
+    try {
+      const data = await sourceApi.checkAll(tenantId)
+      const map = new Map<number, SourceCheckResult>()
+      data.results.forEach(r => map.set(r.id, r))
+      setCheckResults(map)
+    } catch {
+      setCheckResults(null)
+    } finally {
+      setCheckingAll(false)
+    }
+  }
+
   if (!activeTenant) return null
 
   return (
@@ -167,6 +184,15 @@ export default function SourcesPage() {
           <p style={{ fontSize: 13, color: '#888', marginTop: 2 }}>{sources.length} source{sources.length !== 1 ? 's' : ''} configured</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={checkingAll}
+            onClick={handleCheckAll}
+            disabled={!tenantId || sources.length === 0}
+          >
+            {checkResults && !checkingAll ? '↺ Re-check' : '⚡ Check all'}
+          </Button>
           <Button
             variant="secondary"
             size="sm"
@@ -188,7 +214,12 @@ export default function SourcesPage() {
       {isLoading ? (
         <p style={{ color: '#999' }}>Loading…</p>
       ) : (
-        <SourceList sources={sources} tenantId={tenantId} />
+        <SourceList
+          sources={sources}
+          tenantId={tenantId}
+          checkResults={checkResults ?? undefined}
+          checkingAll={checkingAll}
+        />
       )}
 
       {showAdd && (

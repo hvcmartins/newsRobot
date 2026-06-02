@@ -1,3 +1,5 @@
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -6,6 +8,7 @@ from app.database import get_db
 from app.models import Source
 from app.schemas.source import SourceCreate, SourceRead, SourceUpdate
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -53,6 +56,45 @@ def delete_source(source_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Source not found")
     db.delete(source)
     db.commit()
+
+
+@router.post("/check-all")
+def check_all_sources(tenant_id: int, db: Session = Depends(get_db)):
+    """HEAD-check every source URL for a tenant in parallel. Fast connectivity test."""
+    import httpx
+
+    sources = db.query(Source).filter_by(tenant_id=tenant_id).order_by(Source.name).all()
+    if not sources:
+        return {"results": []}
+
+    def _check(src: Source) -> dict:
+        try:
+            with httpx.Client(timeout=6, follow_redirects=True,
+                              headers={"User-Agent": "Mozilla/5.0 (compatible; NewsRobot/1.0)"}) as c:
+                r = c.head(src.url)
+                return {"id": src.id, "online": r.status_code < 400, "http_status": r.status_code}
+        except Exception as exc:
+            return {"id": src.id, "online": False, "error": str(exc)[:120]}
+
+    results: list[dict] = []
+    with ThreadPoolExecutor(max_workers=min(len(sources), 12)) as pool:
+        futures = {pool.submit(_check, s): s for s in sources}
+        try:
+            for future in as_completed(futures, timeout=18):
+                try:
+                    results.append(future.result())
+                except Exception as exc:
+                    s = futures[future]
+                    results.append({"id": s.id, "online": False, "error": str(exc)[:120]})
+        except FuturesTimeout:
+            logger.warning("check-all: timed out; %d/%d completed", len(results), len(futures))
+            for future, s in futures.items():
+                if not future.done():
+                    results.append({"id": s.id, "online": False, "error": "timeout"})
+
+    logger.info("check-all: %d/%d online for tenant %d",
+                sum(1 for r in results if r.get("online")), len(results), tenant_id)
+    return {"results": results}
 
 
 @router.post("/{source_id}/test")

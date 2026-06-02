@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useQueryClient, useMutation } from '@tanstack/react-query'
 import { sourceApi } from '@/api/sources'
 import type { Source } from '@/api/types'
+import type { SourceCheckResult } from '@/api/sources'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import SourceForm from './SourceForm'
@@ -11,9 +12,11 @@ import { formatDistanceToNow } from 'date-fns'
 interface Props {
   sources: Source[]
   tenantId: number
+  checkResults?: Map<number, SourceCheckResult>
+  checkingAll?: boolean
 }
 
-export default function SourceList({ sources, tenantId }: Props) {
+export default function SourceList({ sources, tenantId, checkResults, checkingAll }: Props) {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<Source | null>(null)
   const [testResult, setTestResult] = useState<{ id: number; data: unknown } | null>(null)
@@ -81,7 +84,18 @@ export default function SourceList({ sources, tenantId }: Props) {
                   {s.last_scraped_at ? formatDistanceToNow(new Date(s.last_scraped_at), { addSuffix: true }) : 'Never'}
                 </td>
                 <td style={{ padding: '12px 14px' }}>
-                  <Badge variant={s.is_active ? 'success' : 'neutral'}>{s.is_active ? 'Active' : 'Paused'}</Badge>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <Badge variant={s.is_active ? 'success' : 'neutral'}>{s.is_active ? 'Active' : 'Paused'}</Badge>
+                    {checkingAll && !checkResults?.has(s.id) && (
+                      <span style={{ fontSize: 11, color: '#aaa' }}>checking…</span>
+                    )}
+                    {checkResults?.has(s.id) && (() => {
+                      const r = checkResults.get(s.id)!
+                      return r.online
+                        ? <Badge variant="success">● Online{r.http_status ? ` ${r.http_status}` : ''}</Badge>
+                        : <span title={r.error}><Badge variant="error">✕ Offline</Badge></span>
+                    })()}
+                  </div>
                 </td>
                 <td style={{ padding: '12px 14px' }}>
                   <div style={{ display: 'flex', gap: 6 }}>
