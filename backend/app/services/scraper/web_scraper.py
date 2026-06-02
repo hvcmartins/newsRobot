@@ -34,15 +34,59 @@ _DATE_CLASS_HINTS = re.compile(
 )
 
 
+# Relative date patterns: "2 hours ago", "3 days ago", "yesterday", etc.
+_RELATIVE_DATE = re.compile(
+    r'^(?:just\s+now'
+    r'|(\d+)\s+(second|minute|hour|day|week|month)s?\s+ago'
+    r'|yesterday'
+    r'|today)$',
+    re.IGNORECASE,
+)
+
+
+def _parse_relative_date(value: str) -> datetime.datetime | None:
+    """Convert relative date strings to absolute datetimes."""
+    now = datetime.datetime.utcnow()
+    v = value.strip().lower()
+    if v in ("just now", "agora", "à l'instant"):
+        return now
+    if v == "yesterday":
+        return (now - datetime.timedelta(days=1)).replace(hour=12, minute=0, second=0)
+    if v == "today":
+        return now.replace(hour=12, minute=0, second=0)
+    m = re.match(r'(\d+)\s+(second|minute|hour|day|week|month)s?\s+ago', v, re.IGNORECASE)
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        deltas = {
+            "second": datetime.timedelta(seconds=n),
+            "minute": datetime.timedelta(minutes=n),
+            "hour":   datetime.timedelta(hours=n),
+            "day":    datetime.timedelta(days=n),
+            "week":   datetime.timedelta(weeks=n),
+            "month":  datetime.timedelta(days=n * 30),
+        }
+        return now - deltas[unit]
+    return None
+
+
 def _parse_date(value: str) -> datetime.datetime | None:
     """Try common date formats, return tz-naive datetime or None."""
     if not value:
         return None
     value = value.strip()
-    # Remove trailing timezone name in parens, e.g. "Tue, 13 May 2025 10:00 GMT"
+
+    # Relative dates: "2 hours ago", "yesterday", etc.
+    rel = _parse_relative_date(value)
+    if rel:
+        return rel
+
+    # Remove trailing timezone name in parens e.g. "Tue, 13 May 2025 10:00 (GMT)"
     value = re.sub(r"\s*\([^)]+\)\s*$", "", value).strip()
-    # Normalise ISO 8601: strip sub-seconds so strptime can handle it uniformly
-    # "2024-01-15T08:00:00.123Z" → "2024-01-15T08:00:00Z"
+    # Remove trailing standalone timezone word e.g. "June 2, 2026 - 3:46 pm DILI"
+    value = re.sub(r"\s+[A-Z]{2,5}$", "", value).strip()
+    # Normalise "Month D, YYYY - H:MM am/pm" → "Month D, YYYY H:MM am/pm"
+    value = re.sub(r"\s*-\s*(\d{1,2}:\d{2})", r" \1", value)
+    # Normalise ISO 8601: strip sub-seconds
     iso_clean = re.sub(r"(\d{2}:\d{2}:\d{2})\.\d+", r"\1", value)
 
     candidates = [value] if value == iso_clean else [iso_clean, value]
@@ -56,6 +100,8 @@ def _parse_date(value: str) -> datetime.datetime | None:
             "%Y/%m/%d",
             "%a, %d %b %Y %H:%M:%S %z",   # RFC 2822  e.g. Tue, 13 May 2025 10:00:00 +0000
             "%a, %d %b %Y %H:%M:%S %Z",   # RFC 2822 with named tz e.g. GMT
+            "%B %d, %Y %I:%M %p",          # June 2, 2026 3:46 pm  (after dash normalisation)
+            "%B %d, %Y %H:%M",             # June 2, 2026 15:46
             "%B %d, %Y",
             "%d %B %Y",
             "%b %d, %Y",
