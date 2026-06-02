@@ -173,6 +173,9 @@ export default function AISettingsPage() {
     setApiKey('')
     const d = PROVIDERS.find(p => p.value === v)
     if (d) setModel(d.defaultModel)
+    // Auto-enable when a real provider is picked; auto-disable for "none"
+    if (v === 'none') setEnabled(false)
+    else setEnabled(true)
   }
 
   const saveMut = useMutation({
