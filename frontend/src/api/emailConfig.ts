@@ -11,7 +11,7 @@ export const emailApi = {
   pingSmtp: (tenantId: number) =>
     client.post<{ ok: boolean; host: string; port: number; status: string }>(`/api/email-config/${tenantId}/ping`).then((r) => r.data),
   testSend: (tenantId: number) =>
-    client.post<{ sent_to: string; subject: string; smtp_host: string; smtp_port: number }>(
+    client.post<{ sent_to: string[]; subject: string; smtp_host: string; smtp_port: number }>(
       `/api/email-config/${tenantId}/test`
     ).then((r) => r.data),
   diagnose: (tenantId: number) =>

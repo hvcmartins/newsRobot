@@ -90,13 +90,15 @@ def test_send(tenant_id: int, db: Session = Depends(get_db)):
         )
         text = "Email configuration is working. Your SMTP settings are correct."
 
+    import json as _json
+    recipients = _json.loads(cfg.recipients_json or "[]") or [cfg.from_email]
     logger.info("Test email: host=%s port=%s user=%s has_password=%s from=%s to=%s",
                 cfg.smtp_host, cfg.smtp_port, cfg.smtp_user,
-                bool(cfg.smtp_password), cfg.from_email, cfg.from_email)
+                bool(cfg.smtp_password), cfg.from_email, recipients)
     try:
-        send_email_raw(cfg, subject, html, text, [cfg.from_email])
-        logger.info("Test email sent successfully to %s", cfg.from_email)
-        return {"sent_to": cfg.from_email, "subject": subject,
+        send_email_raw(cfg, subject, html, text, recipients)
+        logger.info("Test email sent successfully to %s", recipients)
+        return {"sent_to": recipients, "subject": subject,
                 "smtp_host": cfg.smtp_host, "smtp_port": cfg.smtp_port}
     except Exception as exc:
         logger.error("Test email failed: %s", exc, exc_info=True)
