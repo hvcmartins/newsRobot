@@ -26,16 +26,16 @@ class OpenAIProvider(AIProvider):
         self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model
         self._extra_body = extra_body or {}
-        # Append /no_think to every prompt when enable_thinking=False is requested.
-        # Works at the model level (Qwen3 instruction tuning) even if the server
-        # ignores the enable_thinking flag in extra_body.
         self._no_think = self._extra_body.get("enable_thinking") is False
 
     def _ask(self, prompt: str, max_tokens: int = 512,
              system: str | None = None) -> str:
         messages = []
         if system:
-            messages.append({"role": "system", "content": system})
+            # Prepend /no_think to system message: works even when the server-level
+            # enable_thinking flag is ignored, because Qwen3 reads it from the prompt.
+            sys_content = "/no_think\n\n" + system if self._no_think else system
+            messages.append({"role": "system", "content": sys_content})
         p = prompt + "\n/no_think" if self._no_think else prompt
         messages.append({"role": "user", "content": p})
         t0 = time.monotonic()
@@ -47,8 +47,19 @@ class OpenAIProvider(AIProvider):
         )
         if resp.usage:
             record_tokens(resp.usage.completion_tokens, time.monotonic() - t0)
-        # Strip <think>…</think> reasoning blocks (Qwen3, DeepSeek-R1, etc.)
-        return strip_thinking(resp.choices[0].message.content.strip())
+        msg = resp.choices[0].message
+        content = msg.content or ""
+        if not content:
+            # llama.cpp separates thinking into reasoning_content, leaving content
+            # empty when thinking consumes the token budget.
+            thinking_len = len(getattr(msg, 'reasoning_content', '') or "")
+            logger.warning(
+                "Empty content from LLM server (reasoning_content tokens≈%d). "
+                "Thinking suppression not working — check llama.cpp version or model.",
+                thinking_len,
+            )
+            return ""
+        return strip_thinking(content.strip())
 
     def _ask_array(self, prompt: str, system: str | None = None) -> list:
         raw = self._ask(prompt, max_tokens=2048, system=system)
