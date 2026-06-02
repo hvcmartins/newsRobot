@@ -142,7 +142,14 @@ def _enrich_article(article_id: int, topic_profile: str | None,
                         result.score, title_short,
                         f" ({result.reason})" if result.reason else "")
             if result.score < 0.5:
+                article_url = article.url
+                article_tenant_id = article.tenant_id
                 db.query(Article).filter(Article.id == article_id).delete()
+                # Also remove from scraped_urls so the article can be
+                # re-evaluated if the tenant's language/profile settings change.
+                db.query(ScrapedUrl).filter_by(
+                    tenant_id=article_tenant_id, url=article_url
+                ).delete()
                 db.commit()
                 ai_log.info("Deleted low-relevance article (%.2f): '%s'",
                             result.score, title_short)
