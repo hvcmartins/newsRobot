@@ -71,19 +71,26 @@ def _is_near_duplicate(article: ScrapedArticle, recent_articles: list[Article],
 
 
 def _record_scraped_url(db: Session, tenant_id: int, url: str) -> None:
-    """Insert into scraped_urls; silently ignore if already present."""
+    """Insert into scraped_urls using a savepoint so failure doesn't roll back the session."""
     try:
-        row = ScrapedUrl(tenant_id=tenant_id, url=url)
-        db.add(row)
-        db.flush()
+        with db.begin_nested():
+            db.add(ScrapedUrl(tenant_id=tenant_id, url=url))
     except IntegrityError:
-        db.rollback()
+        pass  # Already recorded
 
 
 def _is_url_seen(db: Session, tenant_id: int, url: str) -> bool:
-    return (db.query(ScrapedUrl)
-            .filter_by(tenant_id=tenant_id, url=url)
-            .first()) is not None
+    """Return True if the URL was already scraped for this tenant.
+
+    Checks scraped_urls first, then falls back to the articles table so that
+    articles ingested before the scraped_urls table existed are also recognised
+    as duplicates (prevents IntegrityError cascade-rollbacks on the session).
+    """
+    if db.query(ScrapedUrl.id).filter_by(tenant_id=tenant_id, url=url).first():
+        return True
+    if db.query(Article.id).filter_by(tenant_id=tenant_id, url=url).first():
+        return True
+    return False
 
 
 def _enrich_article(article_id: int, topic_profile: str | None,
@@ -235,17 +242,17 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
                 relevance_score=score,
                 duplicate_of_id=dup_id,
             )
-            db.add(db_article)
             try:
-                db.flush()
-                _record_scraped_url(db, source.tenant_id, art.url)
-                new_count += 1
-                new_article_ids.append(db_article.id)
-                recent.append(db_article)
-                if score >= 0.7:
-                    high_priority_new.append(db_article)
+                with db.begin_nested():
+                    db.add(db_article)
             except IntegrityError:
-                db.rollback()
+                continue  # URL collision — _is_url_seen missed it; skip safely
+            _record_scraped_url(db, source.tenant_id, art.url)
+            new_count += 1
+            new_article_ids.append(db_article.id)
+            recent.append(db_article)
+            if score >= 0.7:
+                high_priority_new.append(db_article)
 
         db.commit()
         logger.info("Done '%s': %d new, %d already seen",
