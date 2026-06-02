@@ -8,6 +8,7 @@ export interface Tenant {
   schedule_cron: string
   topic_profile: string | null
   ai_categories: string | null
+  max_article_age_days: number | null
   created_at: string
   updated_at: string
 }

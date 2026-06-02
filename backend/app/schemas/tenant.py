@@ -13,6 +13,7 @@ class TenantBase(BaseModel):
     schedule_cron: str = "0 * * * *"
     topic_profile: Optional[str] = None
     ai_categories: Optional[str] = None  # JSON list e.g. '["ASEAN Affairs", "EU News"]'
+    max_article_age_days: Optional[int] = None  # None = use global default (MAX_ARTICLE_AGE_DAYS env)
 
 
 class TenantCreate(TenantBase):
@@ -35,6 +36,7 @@ class TenantUpdate(BaseModel):
     schedule_cron: Optional[str] = None
     topic_profile: Optional[str] = None
     ai_categories: Optional[str] = None
+    max_article_age_days: Optional[int] = None
 
 
 class TenantRead(TenantBase):

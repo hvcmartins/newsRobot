@@ -163,7 +163,8 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         new_count = 0
         high_priority_new = []
         new_article_ids = []
-        max_age = datetime.timedelta(days=settings.max_article_age_days)
+        age_days = tenant.max_article_age_days or settings.max_article_age_days
+        max_age = datetime.timedelta(days=age_days)
         now = datetime.datetime.utcnow()
 
         for art in articles:

@@ -44,6 +44,7 @@ export default function TenantSettingsPage() {
         global_keywords: form.global_keywords,
         schedule_cron: form.schedule_cron,
         topic_profile: form.topic_profile,
+        max_article_age_days: form.max_article_age_days ?? null,
       })
     },
     onSuccess: () => {
@@ -131,6 +132,23 @@ export default function TenantSettingsPage() {
         <Input label="Scrape Schedule (cron)" value={form.schedule_cron ?? ''} onChange={(e) => set({ schedule_cron: e.target.value })}
           placeholder="0 * * * *  (hourly)" />
         <p style={{ fontSize: 11, color: '#999', marginTop: -8 }}>Cron format: minute hour day month weekday. E.g. "0 */2 * * *" = every 2 hours</p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Max article age (days)</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <input
+              type="number" min={1} max={3650}
+              value={form.max_article_age_days ?? ''}
+              onChange={(e) => set({ max_article_age_days: e.target.value ? Math.max(1, parseInt(e.target.value)) : null })}
+              placeholder="30"
+              style={{ width: 80, padding: '7px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }}
+            />
+            <span style={{ fontSize: 12, color: '#888' }}>
+              Articles older than this are ignored during scraping.{' '}
+              {!form.max_article_age_days && <span style={{ color: '#bbb' }}>Using server default (30 days).</span>}
+            </span>
+          </div>
+        </div>
       </section>
 
       <section style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 16 }}>
