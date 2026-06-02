@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import time
 from .base import (AIProvider, RelevanceResult, EnrichmentResult,
                    RELEVANCE_SYSTEM_TPL, RELEVANCE_USER_TPL,
@@ -64,13 +65,14 @@ class OpenAIProvider(AIProvider):
 
     def _ask_json(self, prompt: str, system: str | None = None) -> dict:
         raw = self._ask(prompt, system=system)
+        cleaned = re.sub(r'```(?:json)?\s*', '', raw).strip()
         try:
-            start = raw.index("{")
-            end = raw.rindex("}") + 1
-            return json.loads(raw[start:end])
+            start = cleaned.index("{")
+            end = cleaned.rindex("}") + 1
+            return json.loads(cleaned[start:end])
         except (ValueError, json.JSONDecodeError) as exc:
-            logger.warning("Failed to parse JSON from AI response: %s", raw)
-            raise ValueError(f"Invalid JSON from AI: {raw}") from exc
+            logger.warning("Failed to parse JSON from AI response: %r", raw[:600])
+            raise ValueError(f"Invalid JSON from AI: {cleaned[:300]}") from exc
 
     def enrich_article(self, title, excerpt, topic_profile, categories) -> EnrichmentResult:
         cats_str = ", ".join(categories) if categories else "Other"
@@ -85,10 +87,13 @@ class OpenAIProvider(AIProvider):
                 title=title, excerpt=(excerpt or "(none)")[:1500], categories=cats_str,
             )
         raw = self._ask(user, max_tokens=800, system=system)
+        # Strip markdown code fences (```json ... ``` or ``` ... ```)
+        cleaned = re.sub(r'```(?:json)?\s*', '', raw).strip()
         try:
-            data = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
+            data = json.loads(cleaned[cleaned.index("{"):cleaned.rindex("}") + 1])
         except (ValueError, json.JSONDecodeError) as exc:
-            raise ValueError(f"enrich_article JSON parse failed: {raw[:200]}") from exc
+            logger.warning("enrich_article raw response: %r", raw[:600])
+            raise ValueError(f"enrich_article JSON parse failed: {cleaned[:300]}") from exc
         if topic_profile:
             score = max(0.0, min(1.0, float(data.get("score", 0.5))))
             reason = str(data.get("reason", ""))
