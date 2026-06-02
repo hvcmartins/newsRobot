@@ -10,6 +10,7 @@ services:
     volumes:
       - ./backend/app:/app/app
       - newsrobot-data:/data
+      - /etc/localtime:/etc/localtime:ro
     environment:
       DATABASE_URL: sqlite:////data/newsrobot.db
       PORT: "8000"
