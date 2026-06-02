@@ -97,6 +97,39 @@ def check_all_sources(tenant_id: int, db: Session = Depends(get_db)):
     return {"results": results}
 
 
+@router.delete("/{source_id}/scraped-urls", status_code=200)
+def clear_scraped_urls(source_id: int, db: Session = Depends(get_db)):
+    """Delete all scraped-URL dedup entries that came from this source's articles,
+    so the source can be re-scraped as if it were fresh."""
+    from app.models import Article
+    from app.models.scraped_url import ScrapedUrl
+
+    source = db.get(Source, source_id)
+    if not source:
+        raise HTTPException(404, "Source not found")
+
+    urls = [
+        row[0]
+        for row in db.query(Article.url)
+        .filter(Article.source_id == source_id, Article.url.isnot(None))
+        .all()
+    ]
+    if urls:
+        deleted = (
+            db.query(ScrapedUrl)
+            .filter(ScrapedUrl.tenant_id == source.tenant_id,
+                    ScrapedUrl.url.in_(urls))
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+    else:
+        deleted = 0
+
+    logger.info("Cleared %d scraped-url entries for source %d ('%s')",
+                deleted, source_id, source.name)
+    return {"cleared": deleted, "source_id": source_id}
+
+
 @router.post("/{source_id}/test")
 def test_source(source_id: int, db: Session = Depends(get_db)):
     """Scrape the source and return up to 5 sample articles without writing to DB."""

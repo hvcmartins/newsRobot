@@ -23,6 +23,7 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
   const [testing, setTesting] = useState<number | null>(null)
   const [scraping, setScraping] = useState<number | null>(null)
   const [scraped, setScraped] = useState<Set<number>>(new Set())
+  const [clearing, setClearing] = useState<number | null>(null)
 
   const deleteMut = useMutation({
     mutationFn: sourceApi.delete,
@@ -65,6 +66,19 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
       alert(e instanceof Error ? e.message : 'Scrape failed')
     } finally {
       setScraping(null)
+    }
+  }
+
+  const handleClearScrapedUrls = async (id: number, name: string) => {
+    if (!confirm(`Reset seen URLs for "${name}"?\n\nNext scrape will re-evaluate all articles from this source as if they were new.`)) return
+    setClearing(id)
+    try {
+      const result = await sourceApi.clearScrapedUrls(id)
+      alert(`Cleared ${result.cleared} seen URL${result.cleared !== 1 ? 's' : ''} for "${name}".`)
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Clear failed')
+    } finally {
+      setClearing(null)
     }
   }
 
@@ -135,6 +149,16 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
                       }}
                     >
                       {scraped.has(s.id) ? '✓ Scraped' : '▶ Scrape'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      loading={clearing === s.id}
+                      onClick={() => handleClearScrapedUrls(s.id, s.name)}
+                      title="Reset seen URLs so next scrape re-evaluates all articles"
+                      style={{ color: '#888', border: '1px solid #ddd', padding: '4px 8px' }}
+                    >
+                      ↺ Reset
                     </Button>
                     <Button size="sm" variant="danger"
                       onClick={() => {

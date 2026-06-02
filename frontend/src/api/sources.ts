@@ -28,4 +28,6 @@ export const sourceApi = {
     client.post(`/api/scrape-runs/trigger/${sourceId}`).then((r) => r.data),
   scrapeAllNow: (tenantId: number) =>
     client.post(`/api/scrape-runs/trigger`, null, { params: { tenant_id: tenantId } }).then((r) => r.data),
+  clearScrapedUrls: (sourceId: number) =>
+    client.delete<{ cleared: number }>(`/api/sources/${sourceId}/scraped-urls`).then((r) => r.data),
 }
