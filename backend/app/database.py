@@ -49,6 +49,7 @@ def _migrate():
     _add_column_if_missing("articles", "summary", "TEXT")
     _add_column_if_missing("articles", "ai_enriched", "BOOLEAN DEFAULT 0")
     _add_column_if_missing("tenants", "topic_profile", "TEXT")
+    _add_column_if_missing("tenants", "ai_categories", "TEXT")
     _fix_empty_slugs()
 
 

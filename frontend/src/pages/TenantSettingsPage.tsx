@@ -15,6 +15,7 @@ export default function TenantSettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [suggestingKw, setSuggestingKw] = useState(false)
+  const [suggestingCats, setSuggestingCats] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [addingTenant, setAddingTenant] = useState(false)
   const [newTenant, setNewTenant] = useState({ name: '', slug: '', primary_color: '#0066cc' })
@@ -83,6 +84,23 @@ export default function TenantSettingsPage() {
     }
   }
 
+  const categories: string[] = (() => {
+    try { return JSON.parse(form.ai_categories ?? '[]') } catch { return [] }
+  })()
+
+  const suggestCategories = async () => {
+    if (!activeTenant) return
+    setSuggestingCats(true)
+    try {
+      const { categories: cats } = await tenantApi.suggestCategories(activeTenant.slug)
+      set({ ai_categories: JSON.stringify(cats) })
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to generate categories')
+    } finally {
+      setSuggestingCats(false)
+    }
+  }
+
   if (!activeTenant) return null
 
   return (
@@ -136,6 +154,27 @@ export default function TenantSettingsPage() {
           <Button variant="secondary" size="sm" loading={suggestingKw} onClick={suggestKeywords}
             disabled={!form.topic_profile?.trim()}>
             ✦ Generate Keywords from Profile
+          </Button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Article Categories (derived from your profile)</label>
+          {categories.length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {categories.map(c => (
+                <span key={c} style={{ background: '#f0f4ff', border: '1px solid #c7d8fb', borderRadius: 12, padding: '3px 10px', fontSize: 12, color: '#3a5fbb' }}>
+                  {c}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 12, color: '#aaa', margin: 0 }}>
+              No categories yet — generate them from your profile below.
+            </p>
+          )}
+          <Button variant="secondary" size="sm" loading={suggestingCats} onClick={suggestCategories}
+            disabled={!form.topic_profile?.trim()}>
+            ✦ Generate Categories from Profile
           </Button>
         </div>
         <hr style={{ border: 'none', borderTop: '1px solid #eee', margin: '4px 0' }} />

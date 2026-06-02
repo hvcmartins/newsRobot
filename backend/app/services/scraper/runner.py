@@ -50,7 +50,8 @@ def _is_near_duplicate(article: ScrapedArticle, recent_articles: list[Article],
     return None
 
 
-def _enrich_article(article_id: int, topic_profile: str | None) -> None:
+def _enrich_article(article_id: int, topic_profile: str | None,
+                    categories: list[str] | None = None) -> None:
     """Run AI enrichment on a stored article in a background thread."""
     import logging as _logging
     ai_log = _logging.getLogger("app.services.ai.enrichment")
@@ -106,9 +107,10 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
         except Exception as exc:
             ai_log.warning("Summary failed for '%s': %s", title_short, exc)
 
-        # Step 3: Category
+        # Step 3: Category — use profile-derived categories when available
         try:
-            article.category = ai.categorize(article.title, article.excerpt or "", [])
+            article.category = ai.categorize(article.title, article.excerpt or "",
+                                              categories or [])
             ai_log.info("Category: %s — '%s'", article.category, title_short)
         except Exception as exc:
             ai_log.warning("Categorize failed for '%s': %s", title_short, exc)
@@ -226,10 +228,12 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
 
         # Async AI enrichment — submit to bounded pool so DB connections
         # stay within the pool limit regardless of article count.
+        tenant_categories = json.loads(tenant.ai_categories or "[]") or None
         if new_article_ids:
             logger.info("Queuing AI enrichment for %d article(s)", len(new_article_ids))
         for article_id in new_article_ids:
-            _enrich_executor.submit(_enrich_article, article_id, tenant.topic_profile)
+            _enrich_executor.submit(_enrich_article, article_id,
+                                    tenant.topic_profile, tenant_categories)
 
         source.last_scraped_at = datetime.datetime.utcnow()
         run.articles_new = new_count
@@ -274,6 +278,8 @@ def enrich_pending(tenant_id: int, db: Session) -> int:
     """
     tenant: Tenant = db.get(Tenant, tenant_id)
     topic_profile = tenant.topic_profile if tenant else None
+    categories = json.loads(tenant.ai_categories or "[]") if tenant else None
+    categories = categories or None
 
     # Use isnot(True) rather than == False so that NULL values (legacy rows
     # added before the column existed) are also picked up.
@@ -284,7 +290,7 @@ def enrich_pending(tenant_id: int, db: Session) -> int:
                .all())
     count = 0
     for a in pending:
-        _enrich_executor.submit(_enrich_article, a.id, topic_profile)
+        _enrich_executor.submit(_enrich_article, a.id, topic_profile, categories)
         count += 1
 
     logger.info("Queued enrichment for %d pending articles (tenant %d)", count, tenant_id)

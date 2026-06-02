@@ -72,3 +72,21 @@ def suggest_keywords(slug: str, db: Session = Depends(get_db)):
     from app.services.ai.factory import get_ai_provider
     keywords = get_ai_provider().suggest_keywords(tenant.topic_profile)
     return {"keywords": keywords}
+
+
+@router.post("/{slug}/suggest-categories")
+def suggest_categories(slug: str, db: Session = Depends(get_db)):
+    """Generate profile-specific news categories from the tenant's topic profile
+    and save them to the tenant. Returns the generated category list."""
+    import json
+    tenant = db.query(Tenant).filter_by(slug=slug).first()
+    if not tenant:
+        raise HTTPException(404, "Tenant not found")
+    if not tenant.topic_profile:
+        raise HTTPException(400, "topic_profile is required")
+    from app.services.ai.factory import get_ai_provider
+    categories = get_ai_provider().suggest_categories(tenant.topic_profile)
+    if categories:
+        tenant.ai_categories = json.dumps(categories)
+        db.commit()
+    return {"categories": categories}

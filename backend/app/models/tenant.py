@@ -15,6 +15,7 @@ class Tenant(Base):
     global_keywords = Column(Text, nullable=True, default="[]")
     schedule_cron = Column(String(100), nullable=False, default="0 * * * *")
     topic_profile = Column(Text, nullable=True)
+    ai_categories = Column(Text, nullable=True)  # JSON list generated from profile
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow,

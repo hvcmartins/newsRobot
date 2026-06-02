@@ -76,6 +76,24 @@ Example element:
 
 DISCOVER_USER_TPL = "Company profile:\n{topic_profile}\n\nSuggest the sources now."
 
+# ── Category suggestion prompt ─────────────────────────────────────────────────
+SUGGEST_CATEGORIES_PROMPT = """\
+Read the topic profile below and extract the main news categories this \
+organisation monitors.
+
+Rules:
+- Derive category names from the profile's section headings and key subject areas.
+- Use specific, descriptive names (2–5 words), not generic terms like "Other" \
+or "General News".
+- Return 6–12 categories that together cover the full profile.
+- Prefer names like "ASEAN Regional Affairs", "EU Institutional News", \
+"Climate Finance", "Diplomatic Protocol" over "Politics", "Finance", "Science".
+
+Profile:
+{topic_profile}
+
+Return JSON only: {{"categories": ["Category One", "Category Two", ...]}}"""
+
 # Keep the combined prompt for any legacy / one-shot usage.
 DISCOVER_PROMPT = DISCOVER_SYSTEM + "\n\nCompany profile:\n{topic_profile}\n\nSuggest the sources now."
 
@@ -301,6 +319,13 @@ class AIProvider(ABC):
 
     @abstractmethod
     def suggest_keywords(self, topic_profile: str) -> list[str]:
+        ...
+
+    @abstractmethod
+    def suggest_categories(self, topic_profile: str) -> list[str]:
+        """Return a list of news category names derived from the topic profile.
+        These replace the generic fixed list (Technology, Finance…) so articles
+        are classified into categories that are meaningful for this tenant."""
         ...
 
     @abstractmethod

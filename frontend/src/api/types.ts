@@ -7,6 +7,7 @@ export interface Tenant {
   global_keywords: string
   schedule_cron: string
   topic_profile: string | null
+  ai_categories: string | null
   created_at: string
   updated_at: string
 }

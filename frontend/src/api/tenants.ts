@@ -13,4 +13,6 @@ export const tenantApi = {
   delete: (slug: string) => client.delete(`/api/tenants/${slug}`),
   suggestKeywords: (slug: string) =>
     client.post<{ keywords: string[] }>(`/api/tenants/${slug}/suggest-keywords`).then((r) => r.data),
+  suggestCategories: (slug: string) =>
+    client.post<{ categories: string[] }>(`/api/tenants/${slug}/suggest-categories`).then((r) => r.data),
 }

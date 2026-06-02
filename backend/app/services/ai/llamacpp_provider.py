@@ -2,8 +2,8 @@ import json
 import logging
 import threading
 from .base import (AIProvider, RelevanceResult,
-                   DISCOVER_PROMPT_SHORT, normalise_discovered,
-                   repair_json_array, extract_sources_from_text)
+                   DISCOVER_PROMPT_SHORT, SUGGEST_CATEGORIES_PROMPT,
+                   normalise_discovered, repair_json_array, extract_sources_from_text)
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +124,12 @@ class LlamaCppProvider(AIProvider):
             f'Return JSON only: {{"duplicate": false}}'
         )
         return bool(data.get("duplicate", False))
+
+    def suggest_categories(self, topic_profile) -> list[str]:
+        data = self._ask_json(SUGGEST_CATEGORIES_PROMPT.format(
+            topic_profile=(topic_profile or "")[:600]
+        ))
+        return [str(c).strip() for c in data.get("categories", []) if str(c).strip()]
 
     def discover_sources(self, topic_profile) -> list[dict]:
         # Use a shorter prompt and more tokens so the response isn't truncated

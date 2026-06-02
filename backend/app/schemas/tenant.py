@@ -12,6 +12,7 @@ class TenantBase(BaseModel):
     global_keywords: Optional[str] = "[]"
     schedule_cron: str = "0 * * * *"
     topic_profile: Optional[str] = None
+    ai_categories: Optional[str] = None  # JSON list e.g. '["ASEAN Affairs", "EU News"]'
 
 
 class TenantCreate(TenantBase):
@@ -33,6 +34,7 @@ class TenantUpdate(BaseModel):
     global_keywords: Optional[str] = None
     schedule_cron: Optional[str] = None
     topic_profile: Optional[str] = None
+    ai_categories: Optional[str] = None
 
 
 class TenantRead(TenantBase):

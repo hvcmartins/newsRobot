@@ -3,6 +3,7 @@ import logging
 from .base import (AIProvider, RelevanceResult,
                    RELEVANCE_SYSTEM_TPL, RELEVANCE_USER_TPL,
                    DISCOVER_SYSTEM, DISCOVER_USER_TPL,
+                   SUGGEST_CATEGORIES_PROMPT,
                    normalise_discovered, repair_json_array, extract_sources_from_text)
 
 logger = logging.getLogger(__name__)
@@ -101,6 +102,10 @@ class OpenAIProvider(AIProvider):
             f'Return JSON: {{"keywords": ["k1"]}}'
         )
         return [str(k) for k in data.get("keywords", [])]
+
+    def suggest_categories(self, topic_profile) -> list[str]:
+        data = self._ask_json(SUGGEST_CATEGORIES_PROMPT.format(topic_profile=topic_profile))
+        return [str(c).strip() for c in data.get("categories", []) if str(c).strip()]
 
     def discover_sources(self, topic_profile) -> list[dict]:
         user = DISCOVER_USER_TPL.format(topic_profile=topic_profile)
