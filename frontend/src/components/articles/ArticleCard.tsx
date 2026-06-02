@@ -93,8 +93,13 @@ export default function ArticleCard({ article, onMarkRead, onReEnrich }: Props) 
           onClick={() => onMarkRead?.(article.id)}
           style={{ fontSize: 15, fontWeight: 600, color: '#1a1a1a', lineHeight: 1.4 }}
         >
-          {article.title}
+          {article.translated_title || article.title}
         </a>
+        {article.translated_title && (
+          <span style={{ fontSize: 12, color: '#aaa', fontStyle: 'italic', marginTop: -4 }}>
+            {article.title}
+          </span>
+        )}
 
         {displayText && (
           <p style={{

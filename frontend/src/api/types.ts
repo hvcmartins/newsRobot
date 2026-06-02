@@ -42,6 +42,7 @@ export interface Article {
   source_id: number
   source: ArticleSource
   title: string
+  translated_title: string | null
   excerpt: string | null
   summary: string | null
   url: string

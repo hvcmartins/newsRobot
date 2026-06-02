@@ -159,6 +159,8 @@ def _enrich_article(article_id: int, topic_profile: str | None,
 
         if result.summary:
             article.summary = result.summary
+        if result.translated_title:
+            article.translated_title = result.translated_title
         article.category = result.category
         ai_log.info("Enriched '%s' → %s", title_short, result.category or "—")
 

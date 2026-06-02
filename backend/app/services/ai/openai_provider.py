@@ -22,17 +22,25 @@ _LANG_NAMES = {
 
 def _build_translation_instruction(accepted_languages: list[str] | None,
                                     translation_language: str | None) -> str:
-    """Return an extra prompt line instructing the model to translate the summary
-    when the article language is not in the accepted list."""
-    if not accepted_languages or not translation_language:
+    """Return an extra prompt line requesting translation when the article is
+    not in an accepted language. Asks for both a translated title and summary."""
+    if not translation_language:
         return ""
     lang_name = _LANG_NAMES.get(translation_language, translation_language.upper())
-    accepted = [_LANG_NAMES.get(l, l.upper()) for l in accepted_languages]
-    accepted_str = ", ".join(accepted)
+    if accepted_languages:
+        accepted = [_LANG_NAMES.get(l, l.upper()) for l in accepted_languages]
+        accepted_str = ", ".join(accepted)
+        return (
+            f"\n4. Detect the article language. "
+            f"If it is NOT one of [{accepted_str}]: "
+            f"write the summary in {lang_name} AND set translated_title to the title translated into {lang_name}. "
+            f"If it IS one of [{accepted_str}]: write the summary in the original language and set translated_title to null.\n"
+        )
     return (
-        f"\n4. Detect the language of the article. "
-        f"If it is NOT one of [{accepted_str}], write the summary in {lang_name}. "
-        f"Otherwise write the summary in the article's original language.\n"
+        f"\n4. Detect the article language. "
+        f"If it is not already {lang_name}: "
+        f"write the summary in {lang_name} AND set translated_title to the title translated into {lang_name}. "
+        f"Otherwise set translated_title to null.\n"
     )
 
 
@@ -137,6 +145,7 @@ class OpenAIProvider(AIProvider):
         except (ValueError, json.JSONDecodeError) as exc:
             logger.warning("enrich_article raw response: %r", raw[:600])
             raise ValueError(f"enrich_article JSON parse failed: {cleaned[:300]}") from exc
+        translated_title = str(data["translated_title"]).strip() if isinstance(data.get("translated_title"), str) else None
         if topic_profile:
             score = max(0.0, min(1.0, float(data.get("score", 0.5))))
             reason = str(data.get("reason", ""))
@@ -148,7 +157,8 @@ class OpenAIProvider(AIProvider):
             category = str(data.get("category", "")).strip() or None
         if category and categories and category not in categories:
             category = None
-        return EnrichmentResult(score=score, reason=reason, summary=summary, category=category)
+        return EnrichmentResult(score=score, reason=reason, summary=summary, category=category,
+                                translated_title=translated_title)
 
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
         system = RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile)

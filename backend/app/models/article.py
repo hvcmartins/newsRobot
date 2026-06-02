@@ -15,6 +15,7 @@ class Article(Base):
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
     source_id = Column(Integer, ForeignKey("sources.id"), nullable=False, index=True)
     title = Column(String(500), nullable=False)
+    translated_title = Column(String(500), nullable=True)
     excerpt = Column(Text, nullable=True)
     summary = Column(Text, nullable=True)
     url = Column(String(500), nullable=False)

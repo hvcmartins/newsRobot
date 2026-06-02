@@ -16,6 +16,7 @@ class ArticleRead(BaseModel):
     source_id: int
     source: ArticleSourceRead
     title: str
+    translated_title: Optional[str] = None
     excerpt: Optional[str] = None
     summary: Optional[str] = None
     url: str

@@ -312,7 +312,8 @@ category from: {categories}
 {translation_instruction}
 Return JSON only:
 {{"score": 0.0, "reason": "<one sentence>", \
-"summary": "<2-3 sentences>" or null, "category": "<name>" or null}}"""
+"summary": "<2-3 sentences>" or null, "category": "<name>" or null, \
+"translated_title": "<title in target language>" or null}}"""
 
 ENRICH_NO_PROFILE_TPL = """\
 Article:
@@ -323,7 +324,8 @@ Excerpt: {excerpt}
 2. Pick the best category from: {categories}
 {translation_instruction}
 Return JSON only:
-{{"summary": "<2-3 sentences>", "category": "<name>"}}"""
+{{"summary": "<2-3 sentences>", "category": "<name>", \
+"translated_title": "<title in target language>" or null}}"""
 
 # Monthly/yearly narrative digest prompts
 MONTHLY_NARRATIVE_TPL = """\
@@ -362,10 +364,11 @@ class RelevanceResult:
 
 @dataclass
 class EnrichmentResult:
-    score: float           # relevance score; 0.5 default when no profile
-    reason: str            # relevance justification; empty when no profile
-    summary: str | None    # AI summary; None if below threshold or not generated
-    category: str | None   # assigned category; None if below threshold
+    score: float                  # relevance score; 0.5 default when no profile
+    reason: str                   # relevance justification; empty when no profile
+    summary: str | None           # AI summary in translation_language (or original)
+    category: str | None          # assigned category; None if below threshold
+    translated_title: str | None = None  # title translated to translation_language; None if original language matches
 
 
 class AIProvider(ABC):

@@ -6,6 +6,7 @@ from .base import (AIProvider, RelevanceResult, EnrichmentResult,
                    ENRICH_USER_TPL, ENRICH_NO_PROFILE_TPL,
                    DISCOVER_SYSTEM, DISCOVER_USER_TPL,
                    SUGGEST_CATEGORIES_PROMPT, normalise_discovered)
+from .openai_provider import _build_translation_instruction
 from .stats import record_tokens
 
 logger = logging.getLogger(__name__)
@@ -59,23 +60,28 @@ class ClaudeProvider(AIProvider):
             logger.warning("Failed to parse JSON from AI response: %s", raw)
             raise ValueError(f"Invalid JSON from AI: {raw}") from exc
 
-    def enrich_article(self, title, excerpt, topic_profile, categories) -> EnrichmentResult:
+    def enrich_article(self, title, excerpt, topic_profile, categories,
+                       accepted_languages=None, translation_language=None) -> EnrichmentResult:
         cats_str = ", ".join(categories) if categories else "Other"
+        translation_instruction = _build_translation_instruction(accepted_languages, translation_language)
         if topic_profile:
             system = RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile)
             user = ENRICH_USER_TPL.format(
-                title=title, excerpt=(excerpt or "(none)")[:1500], categories=cats_str,
+                title=title, excerpt=(excerpt or "(none)")[:1500],
+                categories=cats_str, translation_instruction=translation_instruction,
             )
         else:
             system = None
             user = ENRICH_NO_PROFILE_TPL.format(
-                title=title, excerpt=(excerpt or "(none)")[:1500], categories=cats_str,
+                title=title, excerpt=(excerpt or "(none)")[:1500],
+                categories=cats_str, translation_instruction=translation_instruction,
             )
         raw = self._ask(user, max_tokens=800, system=system)
         try:
             data = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
         except (ValueError, json.JSONDecodeError) as exc:
             raise ValueError(f"enrich_article JSON parse failed: {raw[:200]}") from exc
+        translated_title = str(data["translated_title"]).strip() if isinstance(data.get("translated_title"), str) else None
         if topic_profile:
             score = max(0.0, min(1.0, float(data.get("score", 0.5))))
             reason = str(data.get("reason", ""))
@@ -87,7 +93,8 @@ class ClaudeProvider(AIProvider):
             category = str(data.get("category", "")).strip() or None
         if category and categories and category not in categories:
             category = None
-        return EnrichmentResult(score=score, reason=reason, summary=summary, category=category)
+        return EnrichmentResult(score=score, reason=reason, summary=summary, category=category,
+                                translated_title=translated_title)
 
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
         system = RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile)
