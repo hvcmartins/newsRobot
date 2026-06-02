@@ -1,8 +1,10 @@
 import json
 import logging
+import time
 import httpx
-from .base import (AIProvider, RelevanceResult,
+from .base import (AIProvider, RelevanceResult, EnrichmentResult,
                    RELEVANCE_SYSTEM_TPL, RELEVANCE_USER_TPL,
+                   ENRICH_USER_TPL, ENRICH_NO_PROFILE_TPL,
                    DISCOVER_SYSTEM, DISCOVER_USER_TPL,
                    SUGGEST_CATEGORIES_PROMPT,
                    normalise_discovered, repair_json_array, extract_sources_from_text)
@@ -19,6 +21,8 @@ class OllamaProvider(AIProvider):
     def __init__(self, base_url: str, model: str):
         self._base_url = base_url.rstrip("/")
         self._model = model
+        from .stats import record_tokens as _rt
+        self._record_tokens = _rt
 
     def _ask(self, prompt: str, max_tokens: int = 512,
              system: str | None = None) -> str:
@@ -26,6 +30,7 @@ class OllamaProvider(AIProvider):
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
+        t0 = time.monotonic()
         with httpx.Client(timeout=60) as client:
             resp = client.post(
                 f"{self._base_url}/v1/chat/completions",
@@ -36,7 +41,11 @@ class OllamaProvider(AIProvider):
                 },
             )
             resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
+        data = resp.json()
+        usage = data.get("usage", {})
+        if usage.get("completion_tokens"):
+            self._record_tokens(usage["completion_tokens"], time.monotonic() - t0)
+        return data["choices"][0]["message"]["content"].strip()
 
     def _ask_array(self, prompt: str, system: str | None = None) -> list:
         raw = self._ask(prompt, max_tokens=2048, system=system)
@@ -65,6 +74,36 @@ class OllamaProvider(AIProvider):
         except (ValueError, json.JSONDecodeError) as exc:
             logger.warning("Ollama JSON parse failed: %s", raw)
             raise ValueError(f"Invalid JSON from Ollama: {raw}") from exc
+
+    def enrich_article(self, title, excerpt, topic_profile, categories) -> EnrichmentResult:
+        cats_str = ", ".join(categories) if categories else "Other"
+        if topic_profile:
+            system = RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile)
+            user = ENRICH_USER_TPL.format(
+                title=title, excerpt=(excerpt or "(none)")[:1500], categories=cats_str,
+            )
+        else:
+            system = None
+            user = ENRICH_NO_PROFILE_TPL.format(
+                title=title, excerpt=(excerpt or "(none)")[:1500], categories=cats_str,
+            )
+        raw = self._ask(user, max_tokens=800, system=system)
+        try:
+            data = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ValueError(f"enrich_article JSON parse failed: {raw[:200]}") from exc
+        if topic_profile:
+            score = max(0.0, min(1.0, float(data.get("score", 0.5))))
+            reason = str(data.get("reason", ""))
+            summary = str(data["summary"]).strip() if isinstance(data.get("summary"), str) else None
+            category = str(data["category"]).strip() if isinstance(data.get("category"), str) else None
+        else:
+            score, reason = 0.5, ""
+            summary = str(data.get("summary", "")).strip() or None
+            category = str(data.get("category", "")).strip() or None
+        if category and categories and category not in categories:
+            category = None
+        return EnrichmentResult(score=score, reason=reason, summary=summary, category=category)
 
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
         system = RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile)

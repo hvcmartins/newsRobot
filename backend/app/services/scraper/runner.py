@@ -81,43 +81,31 @@ def _enrich_article(article_id: int, topic_profile: str | None,
             return
         title_short = article.title[:70]
 
-        # Step 1: Relevance check — run first so irrelevant articles are
-        # discarded before spending tokens on summary or category.
+        try:
+            result = ai.enrich_article(
+                article.title, article.excerpt or "",
+                topic_profile, categories or [],
+            )
+        except Exception as exc:
+            ai_log.warning("enrich_article failed for '%s': %s", title_short, exc)
+            return
+
         if topic_profile:
-            try:
-                result = ai.score_relevance(article.title, article.excerpt or "",
-                                            topic_profile)
-                ai_log.info("Relevance %.2f — '%s'%s",
-                            result.score, title_short,
-                            f" ({result.reason})" if result.reason else "")
+            ai_log.info("Relevance %.2f — '%s'%s",
+                        result.score, title_short,
+                        f" ({result.reason})" if result.reason else "")
+            if result.score < 0.5:
+                db.query(Article).filter(Article.id == article_id).delete()
+                db.commit()
+                ai_log.info("Deleted low-relevance article (%.2f): '%s'",
+                            result.score, title_short)
+                return
+            article.relevance_score = result.score
+            article.relevance_reason = result.reason
 
-                if result.score < 0.5:
-                    db.query(Article).filter(Article.id == article_id).delete()
-                    db.commit()
-                    ai_log.info("Deleted low-relevance article (%.2f): '%s'",
-                                result.score, title_short)
-                    return
-
-                article.relevance_score = result.score
-                article.relevance_reason = result.reason
-            except Exception as exc:
-                ai_log.warning("Relevance scoring failed for '%s': %s", title_short, exc)
-
-        # Step 2: Summary (only reached for relevant articles)
-        ai_log.info("Summarising: '%s'", title_short)
-        try:
-            article.summary = ai.summarize(article.title, article.excerpt or "")
-            ai_log.info("Summary done: '%s'", title_short)
-        except Exception as exc:
-            ai_log.warning("Summary failed for '%s': %s", title_short, exc)
-
-        # Step 3: Category — use profile-derived categories when available
-        try:
-            article.category = ai.categorize(article.title, article.excerpt or "",
-                                              categories or [])
-            ai_log.info("Category: %s — '%s'", article.category, title_short)
-        except Exception as exc:
-            ai_log.warning("Categorize failed for '%s': %s", title_short, exc)
+        article.summary = result.summary
+        article.category = result.category
+        ai_log.info("Enriched '%s' → %s", title_short, result.category or "—")
 
         article.ai_enriched = True
         db.commit()

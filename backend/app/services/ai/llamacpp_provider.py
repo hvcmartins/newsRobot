@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 import threading
 from .base import (AIProvider, RelevanceResult,
                    DISCOVER_PROMPT_SHORT, SUGGEST_CATEGORIES_PROMPT,
@@ -43,16 +44,21 @@ class LlamaCppProvider(AIProvider):
         return self._llm
 
     def _ask(self, prompt: str, max_tokens: int = 512) -> str:
+        from .stats import record_tokens
         llm = self._get_llm()
         # Serialize all inference calls — llama_cpp's Llama object is not
         # thread-safe; concurrent calls from the enrichment thread pool
         # cause segfaults that crash the entire container.
+        t0 = time.monotonic()
         with self._infer_lock:
             resp = llm.create_chat_completion(
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
                 temperature=0.1,
             )
+        usage = resp.get("usage", {})
+        if usage.get("completion_tokens"):
+            record_tokens(usage["completion_tokens"], time.monotonic() - t0)
         return resp["choices"][0]["message"]["content"].strip()
 
     def _ask_json(self, prompt: str) -> dict:

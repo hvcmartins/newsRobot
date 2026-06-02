@@ -1,8 +1,9 @@
 import json
 import logging
 import time
-from .base import (AIProvider, RelevanceResult,
+from .base import (AIProvider, RelevanceResult, EnrichmentResult,
                    RELEVANCE_SYSTEM_TPL, RELEVANCE_USER_TPL,
+                   ENRICH_USER_TPL, ENRICH_NO_PROFILE_TPL,
                    DISCOVER_SYSTEM, DISCOVER_USER_TPL,
                    SUGGEST_CATEGORIES_PROMPT,
                    normalise_discovered, repair_json_array, extract_sources_from_text)
@@ -65,6 +66,36 @@ class OpenAIProvider(AIProvider):
         except (ValueError, json.JSONDecodeError) as exc:
             logger.warning("Failed to parse JSON from AI response: %s", raw)
             raise ValueError(f"Invalid JSON from AI: {raw}") from exc
+
+    def enrich_article(self, title, excerpt, topic_profile, categories) -> EnrichmentResult:
+        cats_str = ", ".join(categories) if categories else "Other"
+        if topic_profile:
+            system = RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile)
+            user = ENRICH_USER_TPL.format(
+                title=title, excerpt=(excerpt or "(none)")[:1500], categories=cats_str,
+            )
+        else:
+            system = None
+            user = ENRICH_NO_PROFILE_TPL.format(
+                title=title, excerpt=(excerpt or "(none)")[:1500], categories=cats_str,
+            )
+        raw = self._ask(user, max_tokens=800, system=system)
+        try:
+            data = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ValueError(f"enrich_article JSON parse failed: {raw[:200]}") from exc
+        if topic_profile:
+            score = max(0.0, min(1.0, float(data.get("score", 0.5))))
+            reason = str(data.get("reason", ""))
+            summary = str(data["summary"]).strip() if isinstance(data.get("summary"), str) else None
+            category = str(data["category"]).strip() if isinstance(data.get("category"), str) else None
+        else:
+            score, reason = 0.5, ""
+            summary = str(data.get("summary", "")).strip() or None
+            category = str(data.get("category", "")).strip() or None
+        if category and categories and category not in categories:
+            category = None
+        return EnrichmentResult(score=score, reason=reason, summary=summary, category=category)
 
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
         system = RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile)

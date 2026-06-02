@@ -284,6 +284,39 @@ def repair_json_array(raw: str) -> str:
     return joined
 
 
+# ── Combined enrichment prompts ───────────────────────────────────────────────
+# Used by capable providers (Claude, OpenAI, Ollama) to do relevance scoring +
+# summary + category in a single API call, cutting 3 round-trips to 1.
+# The system block is the same RELEVANCE_SYSTEM_TPL (profile + rubric) so it
+# benefits from prompt caching on Claude.
+
+ENRICH_USER_TPL = """\
+Article to evaluate:
+Title: {title}
+Excerpt: {excerpt}
+
+Complete all in one pass:
+1. Score relevance (0.0–1.0) using the rubric above.
+2. If score ≥ 0.5: write a 2–3 sentence factual summary and pick the best \
+category from: {categories}
+3. If score < 0.5: set summary and category to null — no need to generate them.
+
+Return JSON only:
+{{"score": 0.0, "reason": "<one sentence>", \
+"summary": "<2-3 sentences>" or null, "category": "<name>" or null}}"""
+
+ENRICH_NO_PROFILE_TPL = """\
+Article:
+Title: {title}
+Excerpt: {excerpt}
+
+1. Write a 2–3 sentence factual summary.
+2. Pick the best category from: {categories}
+
+Return JSON only:
+{{"summary": "<2-3 sentences>", "category": "<name>"}}"""
+
+
 @dataclass
 class RelevanceResult:
     score: float
@@ -292,9 +325,10 @@ class RelevanceResult:
 
 @dataclass
 class EnrichmentResult:
-    summary: Optional[str]
-    category: Optional[str]
-    relevance: Optional[RelevanceResult]
+    score: float           # relevance score; 0.5 default when no profile
+    reason: str            # relevance justification; empty when no profile
+    summary: str | None    # AI summary; None if below threshold or not generated
+    category: str | None   # assigned category; None if below threshold
 
 
 class AIProvider(ABC):
@@ -327,6 +361,26 @@ class AIProvider(ABC):
         These replace the generic fixed list (Technology, Finance…) so articles
         are classified into categories that are meaningful for this tenant."""
         ...
+
+    def enrich_article(self, title: str, excerpt: str,
+                       topic_profile: str | None,
+                       categories: list[str]) -> "EnrichmentResult":
+        """Score relevance, summarise, and categorise in one shot.
+
+        Default: chains individual methods (safe for all providers).
+        Capable providers override this with a single combined API call.
+        """
+        score, reason = 0.5, ""
+        if topic_profile:
+            rel = self.score_relevance(title, excerpt, topic_profile)
+            score, reason = rel.score, rel.reason
+            if score < 0.5:
+                return EnrichmentResult(score=score, reason=reason,
+                                        summary=None, category=None)
+        summary = self.summarize(title, excerpt)
+        category = self.categorize(title, excerpt, categories)
+        return EnrichmentResult(score=score, reason=reason,
+                                summary=summary, category=category)
 
     @abstractmethod
     def recommend_sources(self, topic_profile: str,
