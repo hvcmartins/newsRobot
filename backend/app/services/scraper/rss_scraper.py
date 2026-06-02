@@ -1,6 +1,7 @@
 import datetime
 import logging
 import re
+from urllib.parse import urljoin
 import app.compat  # noqa: F401 — patch html.parser before feedparser loads
 import feedparser
 import httpx
@@ -18,25 +19,40 @@ _HEADERS = {
 # Matches & not already part of a valid XML entity reference or char ref
 _BARE_AMP = re.compile(r'&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)')
 
-# Characters illegal in XML 1.0: everything below 0x20 except tab/LF/CR,
-# plus DEL (0x7F).  These cause "invalid token" parse errors.
-_INVALID_XML_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+# Characters illegal in XML 1.0:
+#   - control chars below 0x20 except tab (0x09), LF (0x0A), CR (0x0D)
+#   - DEL (0x7F)
+#   - Unicode surrogates (0xD800–0xDFFF) — valid in Python strings but illegal in XML
+#   - XML non-characters (0xFFFE, 0xFFFF)
+_INVALID_XML_CHARS = re.compile(
+    r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\ud800-\udfff￾￿]'
+)
 
 
 def _sanitize_xml(raw: bytes) -> bytes:
-    """Fix the two most common XML issues that cause feedparser to fail.
-
-    1. Control characters (0x00–0x1F except tab/LF/CR, plus DEL) — illegal
-       in XML 1.0 and the usual cause of 'not well-formed (invalid token)'.
-    2. Bare & in attribute values / text — the usual cause of 'undefined entity'.
-    """
+    """Fix common XML issues that cause feedparser to fail."""
     try:
         text = raw.decode('utf-8', errors='replace')
-        text = _INVALID_XML_CHARS.sub('', text)   # strip illegal chars
-        text = _BARE_AMP.sub('&amp;', text)        # escape bare ampersands
+        text = _INVALID_XML_CHARS.sub('', text)
+        text = _BARE_AMP.sub('&amp;', text)
         return text.encode('utf-8')
     except Exception:
         return raw
+
+
+def _find_feed_url_in_html(raw: bytes, base_url: str) -> str | None:
+    """Return the RSS/Atom feed URL advertised by an HTML page, or None."""
+    try:
+        soup = BeautifulSoup(raw, "html.parser")
+        for link in soup.find_all("link", rel="alternate"):
+            t = link.get("type", "")
+            if "rss" in t or "atom" in t:
+                href = link.get("href", "")
+                if href:
+                    return urljoin(base_url, href)
+    except Exception:
+        pass
+    return None
 
 
 def _strip_html(text: str) -> str:
@@ -56,16 +72,36 @@ def _extract_image(entry) -> str | None:
 
 
 def _parse_feed(raw: bytes, content_type: str, source_url: str):
-    """Parse feed bytes with feedparser, always sanitizing first."""
+    """Parse feed bytes with feedparser.
+
+    Strategy (in order):
+    1. Sanitize + feedparser — handles the majority of invalid-token errors.
+    2. lxml recovery mode — re-serialises the XML using lxml's error-tolerant
+       parser, then feeds the clean bytes to feedparser.  Catches malformed
+       tags, bad attribute syntax, and other structural issues.
+    3. Raw original — last-resort fallback in case our transforms regressed.
+    """
     headers = {"content-type": content_type, "content-location": source_url}
-    # Sanitize first — safe for valid XML, fixes 'invalid token' from control
-    # chars that appear anywhere in the feed (not just before the first entry).
     sanitized = _sanitize_xml(raw)
+
     feed = feedparser.parse(sanitized, response_headers=headers)
     if not feed.bozo or feed.entries:
         return feed
-    # Sanitization didn't help; try the raw original in case sanitization
-    # introduced a regression (very unlikely, but fail-safe).
+
+    # lxml recovery pass
+    try:
+        from lxml import etree  # noqa: PLC0415
+        lxml_parser = etree.XMLParser(recover=True, resolve_entities=False)
+        root = etree.fromstring(sanitized, lxml_parser)
+        recovered = etree.tostring(root, xml_declaration=True, encoding="utf-8")
+        feed_lxml = feedparser.parse(recovered, response_headers=headers)
+        if feed_lxml.entries:
+            logger.debug("lxml recovery produced %d entries for %s",
+                         len(feed_lxml.entries), source_url)
+            return feed_lxml
+    except Exception as exc:
+        logger.debug("lxml recovery failed for %s: %s", source_url, exc)
+
     feed_raw = feedparser.parse(raw, response_headers=headers)
     return feed_raw if feed_raw.entries else feed
 
@@ -95,14 +131,37 @@ class RssScraper(AbstractScraper):
                 ) from exc
             raise ValueError(f"Could not reach feed: {exc}") from exc
 
+        # When the server returns an HTML page, try to auto-discover the feed
+        # via <link rel="alternate" type="application/rss+xml">.
+        if "html" in content_type.lower():
+            discovered = _find_feed_url_in_html(raw, self.source_url)
+            if discovered:
+                logger.warning(
+                    "'%s' returned HTML — auto-following advertised feed URL: %s "
+                    "(update the source URL to avoid this warning)",
+                    self.source_name, discovered,
+                )
+                try:
+                    with httpx.Client(timeout=20, follow_redirects=True) as client:
+                        resp2 = client.get(discovered, headers=_HEADERS)
+                        resp2.raise_for_status()
+                    raw = resp2.content
+                    content_type = resp2.headers.get("content-type", "application/xml")
+                except Exception:
+                    pass  # fall through to the error path below
+
         feed = _parse_feed(raw, content_type, self.source_url)
 
         if feed.bozo and not feed.entries:
             exc_str = str(feed.bozo_exception)
-            if "html" in exc_str.lower():
+            if "html" in content_type.lower() or "html" in exc_str.lower():
+                hint = ""
+                discovered = _find_feed_url_in_html(raw, self.source_url)
+                if discovered:
+                    hint = f" Suggested feed URL: {discovered}"
                 raise ValueError(
                     "URL returned an HTML page, not an RSS/Atom feed. "
-                    "Check that the URL points to the actual feed (e.g. /feed/ or /rss/)."
+                    f"Check that the URL points to the actual feed (e.g. /feed/ or /rss/).{hint}"
                 )
             raise ValueError(f"Failed to parse RSS feed: {feed.bozo_exception}")
 
