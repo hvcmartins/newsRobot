@@ -40,13 +40,21 @@ def send_email_raw(config, subject: str, html: str, text: str,
     msg.attach(MIMEText(text, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
 
-    with smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=30) as server:
-        server.ehlo()
-        if config.smtp_port in (587, 465):
-            server.starttls()
-        if config.smtp_user and config.smtp_password:
-            server.login(config.smtp_user, config.smtp_password)
-        server.sendmail(config.from_email, recipients, msg.as_string())
+    if config.smtp_port == 465:
+        # Implicit TLS — must use SMTP_SSL from the start
+        with smtplib.SMTP_SSL(config.smtp_host, config.smtp_port, timeout=30) as server:
+            if config.smtp_user and config.smtp_password:
+                server.login(config.smtp_user, config.smtp_password)
+            server.sendmail(config.from_email, recipients, msg.as_string())
+    else:
+        with smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=30) as server:
+            server.ehlo()
+            if config.smtp_port == 587:
+                server.starttls()
+                server.ehlo()
+            if config.smtp_user and config.smtp_password:
+                server.login(config.smtp_user, config.smtp_password)
+            server.sendmail(config.from_email, recipients, msg.as_string())
 
 
 def _archive_articles(articles: list, digest_id: int, db: Session) -> None:

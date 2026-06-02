@@ -52,13 +52,25 @@ def test_send(tenant_id: int, db: Session = Depends(get_db)):
     cfg = _get_or_404(tenant_id, db)
     from app.services.email.builder import build_email_context
     from app.services.email.sender import render_email, send_email_raw
-    context = build_email_context(tenant_id, None, "daily", db)
-    if not context:
-        raise HTTPException(400, "No articles available to preview")
-    html, text = render_email(context)
+
+    context = build_email_context(tenant_id, None, "immediate", db, preview=True)
+    if context:
+        html, text = render_email(context)
+        subject = f"[TEST] {context['subject']}"
+    else:
+        # No articles yet — send a plain connectivity test
+        subject = "[TEST] NewsRobot email configuration"
+        html = (
+            "<div style='font-family:sans-serif;padding:32px;max-width:600px'>"
+            "<h2 style='color:#333'>Email configuration is working ✓</h2>"
+            "<p style='color:#666'>Your SMTP settings are correct. "
+            "Articles will appear here once your sources have been scraped.</p>"
+            "</div>"
+        )
+        text = "Email configuration is working. Your SMTP settings are correct."
+
     try:
-        send_email_raw(cfg, f"[TEST] {context['subject']}", html, text,
-                       [cfg.from_email])
+        send_email_raw(cfg, subject, html, text, [cfg.from_email])
         return {"sent_to": cfg.from_email}
     except Exception as exc:
         raise HTTPException(500, f"Send failed: {exc}")
