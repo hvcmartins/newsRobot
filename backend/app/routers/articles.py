@@ -69,6 +69,7 @@ def list_articles(
 def enrichment_status(tenant_id: int, db: Session = Depends(get_db)):
     """Return AI enrichment progress counts for the tenant's articles."""
     from app.services.ai.stats import get_stats
+    from app.services.scraper.runner import is_enrichment_paused
     base = db.query(Article).filter(
         Article.tenant_id == tenant_id,
         Article.duplicate_of_id.is_(None),
@@ -80,9 +81,18 @@ def enrichment_status(tenant_id: int, db: Session = Depends(get_db)):
         "total": total,
         "enriched": enriched,
         "pending": total - enriched,
+        "paused": is_enrichment_paused(tenant_id),
         "tokens_per_second": stats["tokens_per_second"],
         "seconds_per_article": stats["seconds_per_article"],
     }
+
+
+@router.post("/enrich-stop")
+def stop_enrichment(tenant_id: int):
+    """Pause AI enrichment for this tenant. Queued tasks exit immediately."""
+    from app.services.scraper.runner import pause_tenant_enrichment
+    pause_tenant_enrichment(tenant_id)
+    return {"paused": True}
 
 
 @router.post("/enrich")
@@ -96,8 +106,9 @@ def trigger_enrichment(
     force=true resets ai_enriched on all articles first, so already-enriched
     articles are re-processed with the current AI provider and prompts.
     """
-    from app.services.scraper.runner import enrich_pending
+    from app.services.scraper.runner import enrich_pending, resume_tenant_enrichment
     from app.services.ai.factory import get_ai_provider
+    resume_tenant_enrichment(tenant_id)
     from app.services.ai.null import NullProvider
     try:
         ai = get_ai_provider()

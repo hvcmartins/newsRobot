@@ -79,6 +79,10 @@ export default function ArticlesPage() {
     },
     onError: (err: Error) => setEnrichError(err.message),
   })
+  const stopEnrichMut = useMutation({
+    mutationFn: () => articleApi.stopEnrich(tenantId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['enrichment-status', tenantId] }),
+  })
   const reEnrichMut = useMutation({
     mutationFn: () => articleApi.triggerEnrich(tenantId, true),
     onSuccess: (data) => {
@@ -102,6 +106,7 @@ export default function ArticlesPage() {
   const enrichTotal = enrichStatus?.total ?? 0
   const enriched = enrichStatus?.enriched ?? 0
   const enrichPct = enrichTotal > 0 ? Math.round((enriched / enrichTotal) * 100) : 0
+  const isPaused = enrichStatus?.paused ?? false
   const tps: number | null = enrichStatus?.tokens_per_second ?? null
   const secsPerArticle: number | null = enrichStatus?.seconds_per_article ?? null
   const etaSecs = secsPerArticle != null && pending > 0 ? Math.ceil(secsPerArticle * pending) : null
@@ -143,7 +148,7 @@ export default function ArticlesPage() {
       {/* AI enrichment progress banner */}
       {(enrichTotal > 0 || enrichError) && (
         <div style={{
-          background: pending > 0 ? '#f3e5f5' : '#e8f5e9',
+          background: pending === 0 ? '#e8f5e9' : isPaused ? '#f5f5f5' : '#f3e5f5',
           borderRadius: 8,
           padding: '10px 14px',
           display: 'flex',
@@ -151,31 +156,41 @@ export default function ArticlesPage() {
           gap: 12,
           flexWrap: 'wrap',
         }}>
-          <span style={{ fontSize: 13, color: pending > 0 ? '#7b1fa2' : '#2e7d32', flexShrink: 0 }}>
-            {pending > 0
-              ? `✦ AI enriching… ${enriched} / ${enrichTotal} articles (${enrichPct}%)`
-              : `✦ AI enrichment complete — ${enrichTotal} articles`}
+          <span style={{ fontSize: 13, flexShrink: 0,
+            color: pending === 0 ? '#2e7d32' : isPaused ? '#757575' : '#7b1fa2' }}>
+            {pending === 0
+              ? `✦ AI enrichment complete — ${enrichTotal} articles`
+              : isPaused
+              ? `⏸ Enrichment paused — ${enriched} / ${enrichTotal} (${enrichPct}%)`
+              : `✦ AI enriching… ${enriched} / ${enrichTotal} articles (${enrichPct}%)`}
           </span>
           <div style={{
             flex: 1, minWidth: 80, height: 6, borderRadius: 3,
-            background: pending > 0 ? '#e1bee7' : '#c8e6c9',
+            background: pending === 0 ? '#c8e6c9' : isPaused ? '#e0e0e0' : '#e1bee7',
           }}>
             <div style={{
               width: `${enrichPct}%`, height: '100%', borderRadius: 3,
-              background: pending > 0 ? '#9c27b0' : '#4caf50',
+              background: pending === 0 ? '#4caf50' : isPaused ? '#9e9e9e' : '#9c27b0',
               transition: 'width 0.6s ease',
             }} />
           </div>
-          {pending > 0 && (tps != null || etaLabel != null) && (
+          {pending > 0 && !isPaused && (tps != null || etaLabel != null) && (
             <span style={{ fontSize: 11, color: '#9c27b0', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
               {tps != null && `${tps} tok/s`}{tps != null && etaLabel && ' · '}{etaLabel}
             </span>
           )}
-          {pending > 0 && (
+          {pending > 0 && !isPaused && (
+            <Button size="sm" variant="secondary" loading={stopEnrichMut.isPending}
+              onClick={() => stopEnrichMut.mutate()}
+              style={{ fontSize: 11, padding: '3px 10px', flexShrink: 0 }}>
+              ⏹ Stop
+            </Button>
+          )}
+          {pending > 0 && isPaused && (
             <Button size="sm" variant="secondary" loading={enrichMut.isPending}
               onClick={() => enrichMut.mutate()}
               style={{ fontSize: 11, padding: '3px 10px', flexShrink: 0 }}>
-              Enrich all now
+              ▶ Resume
             </Button>
           )}
           {pending === 0 && (

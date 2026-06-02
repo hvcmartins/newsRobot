@@ -25,11 +25,13 @@ export const articleApi = {
   clearAll: (tenantId: number) =>
     client.delete('/api/articles/', { params: { tenant_id: tenantId } }).then((r) => r.data),
   enrichmentStatus: (tenantId: number) =>
-    client.get<{ total: number; enriched: number; pending: number; tokens_per_second: number | null; seconds_per_article: number | null }>(
+    client.get<{ total: number; enriched: number; pending: number; paused: boolean; tokens_per_second: number | null; seconds_per_article: number | null }>(
       '/api/articles/enrichment-status', { params: { tenant_id: tenantId } }
     ).then((r) => r.data),
   triggerEnrich: (tenantId: number, force = false) =>
     client.post<{ queued: number }>(
       '/api/articles/enrich', null, { params: { tenant_id: tenantId, force } }
     ).then((r) => r.data),
+  stopEnrich: (tenantId: number) =>
+    client.post<{ paused: true }>('/api/articles/enrich-stop', null, { params: { tenant_id: tenantId } }).then((r) => r.data),
 }

@@ -3,6 +3,7 @@ import json
 import logging
 import datetime
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +19,27 @@ logger = logging.getLogger(__name__)
 # Single enrichment worker: SQLite can't handle concurrent writers, and llamacpp
 # already serializes inference via its own lock — extra threads only add contention.
 _enrich_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="enrich")
+
+# Per-tenant enrichment pause — tenant IDs in this set skip enrichment tasks.
+_paused_tenants: set[int] = set()
+_paused_lock = threading.Lock()
+
+
+def pause_tenant_enrichment(tenant_id: int) -> None:
+    with _paused_lock:
+        _paused_tenants.add(tenant_id)
+    logger.info("Enrichment paused for tenant %d", tenant_id)
+
+
+def resume_tenant_enrichment(tenant_id: int) -> None:
+    with _paused_lock:
+        _paused_tenants.discard(tenant_id)
+    logger.info("Enrichment resumed for tenant %d", tenant_id)
+
+
+def is_enrichment_paused(tenant_id: int) -> bool:
+    with _paused_lock:
+        return tenant_id in _paused_tenants
 
 
 def _keyword_relevance(article: ScrapedArticle, keywords: list[str]) -> float:
@@ -72,6 +94,11 @@ def _enrich_article(article_id: int, topic_profile: str | None,
     try:
         article = db.get(Article, article_id)
         if not article or article.ai_enriched:
+            return
+
+        if is_enrichment_paused(article.tenant_id):
+            ai_log.debug("Enrichment paused for tenant %d — skipping article %d",
+                         article.tenant_id, article_id)
             return
 
         ai = get_ai_provider()
