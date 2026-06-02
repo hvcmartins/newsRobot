@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ tenant_name }} — {{ subject }}</title>
+  <style>
+    body { margin: 0; padding: 0; background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
+    .wrapper { max-width: 620px; margin: 24px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .header { background: {{ primary_color }}; padding: 36px 40px; }
+    .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .header img { max-height: 48px; display: block; }
+    .header-date { color: rgba(255,255,255,0.75); font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; }
+    .header-divider { height: 1px; background: rgba(255,255,255,0.2); margin: 16px 0; }
+    .header h1 { color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; line-height: 1.3; letter-spacing: -0.3px; }
+    .header .badge { display: inline-block; margin-top: 10px; background: rgba(255,255,255,0.2); color: #fff; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; padding: 4px 12px; border-radius: 20px; }
+    .body { padding: 36px 40px; }
+    .body p { margin: 0 0 18px; font-size: 15px; color: #333; line-height: 1.75; }
+    .body p:last-child { margin-bottom: 0; }
+    .footer { background: #f8f9fa; padding: 20px 40px; text-align: center; font-size: 11px; color: #aaa; line-height: 1.6; border-top: 1px solid #eee; }
+    .footer a { color: #aaa; }
+    @media (max-width: 480px) {
+      .wrapper { margin: 0; border-radius: 0; }
+      .header, .body { padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <div class="header-top">
+      {% if logo_url %}<img src="{{ logo_url }}" alt="{{ tenant_name }}">{% else %}<span style="color:#fff;font-size:18px;font-weight:700;">{{ tenant_name }}</span>{% endif %}
+      <span class="header-date">{{ label }}</span>
+    </div>
+    <div class="header-divider"></div>
+    <h1>{% if digest_type == 'monthly' %}Monthly Review{% else %}Year in Review{% endif %}</h1>
+    <span class="badge">{% if digest_type == 'monthly' %}Monthly Digest{% else %}Annual Report{% endif %}</span>
+  </div>
+
+  <div class="body">
+    {% for paragraph in summary_text.split('\n\n') %}
+    {% if paragraph.strip() %}
+    <p>{{ paragraph.strip() }}</p>
+    {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="footer">
+    {{ tenant_name }} — {{ label }} digest<br>
+    You are receiving this because you subscribed to {{ tenant_name }} news alerts.
+  </div>
+</div>
+</body>
+</html>

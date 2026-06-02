@@ -31,6 +31,15 @@ class EmailConfig(Base):
                                default="{{tenant_name}} News Digest – {{date}}")
     intro_text = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    # Monthly digest
+    monthly_digest_enabled = Column(Boolean, default=False, nullable=False)
+    monthly_digest_day = Column(Integer, default=1)    # day of month (1-28)
+    monthly_digest_time = Column(String(5), default="08:00")
+    # Yearly digest
+    yearly_digest_enabled = Column(Boolean, default=False, nullable=False)
+    yearly_digest_month = Column(Integer, default=1)   # month (1-12)
+    yearly_digest_day = Column(Integer, default=1)
+    yearly_digest_time = Column(String(5), default="08:00")
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow,

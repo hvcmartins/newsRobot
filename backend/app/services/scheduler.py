@@ -41,6 +41,66 @@ def _make_email_job(tenant_id: int, frequency: str):
     return job
 
 
+def _make_monthly_job(tenant_id: int):
+    def job():
+        import datetime
+        from app.database import SessionLocal
+        from app.services.email.monthly_digest import run_monthly_digest
+        db = SessionLocal()
+        try:
+            now = datetime.datetime.utcnow()
+            # Send digest for the previous month
+            first_of_month = now.replace(day=1)
+            prev = first_of_month - datetime.timedelta(days=1)
+            run_monthly_digest(tenant_id, prev.year, prev.month, db)
+        except Exception as exc:
+            logger.error("Monthly digest failed for tenant %d: %s", tenant_id, exc)
+        finally:
+            db.close()
+    return job
+
+
+def _make_yearly_job(tenant_id: int):
+    def job():
+        import datetime
+        from app.database import SessionLocal
+        from app.services.email.monthly_digest import run_yearly_digest
+        db = SessionLocal()
+        try:
+            now = datetime.datetime.utcnow()
+            run_yearly_digest(tenant_id, now.year - 1, db)
+        except Exception as exc:
+            logger.error("Yearly digest failed for tenant %d: %s", tenant_id, exc)
+        finally:
+            db.close()
+    return job
+
+
+def _add_monthly_job(tenant_id: int, day: int, send_time: str):
+    try:
+        h, m = send_time.split(":")
+        trigger = CronTrigger(day=day, hour=int(h), minute=int(m), timezone="UTC")
+        scheduler.add_job(
+            _make_monthly_job(tenant_id), trigger=trigger,
+            id=f"monthly_{tenant_id}", replace_existing=True,
+        )
+    except Exception as exc:
+        logger.error("Failed to add monthly job for tenant %d: %s", tenant_id, exc)
+
+
+def _add_yearly_job(tenant_id: int, month: int, day: int, send_time: str):
+    try:
+        h, m = send_time.split(":")
+        trigger = CronTrigger(month=month, day=day, hour=int(h),
+                              minute=int(m), timezone="UTC")
+        scheduler.add_job(
+            _make_yearly_job(tenant_id), trigger=trigger,
+            id=f"yearly_{tenant_id}", replace_existing=True,
+        )
+    except Exception as exc:
+        logger.error("Failed to add yearly job for tenant %d: %s", tenant_id, exc)
+
+
 def load_tenant_jobs():
     from app.database import SessionLocal
     from app.models import Tenant, EmailFrequency
@@ -53,6 +113,12 @@ def load_tenant_jobs():
                 cfg = tenant.email_config
                 if cfg.frequency != EmailFrequency.immediate:
                     _add_email_job(tenant.id, cfg.frequency, cfg.send_time)
+                if cfg.monthly_digest_enabled:
+                    _add_monthly_job(tenant.id, cfg.monthly_digest_day,
+                                     cfg.monthly_digest_time)
+                if cfg.yearly_digest_enabled:
+                    _add_yearly_job(tenant.id, cfg.yearly_digest_month,
+                                    cfg.yearly_digest_day, cfg.yearly_digest_time)
     except Exception as exc:
         logger.error("Failed to load tenant jobs: %s", exc)
     finally:
@@ -99,13 +165,21 @@ def refresh_tenant_job(tenant_id: int):
         tenant = db.get(Tenant, tenant_id)
         if not tenant:
             return
-        for jid in (f"scrape_{tenant_id}", f"email_{tenant_id}"):
+        for jid in (f"scrape_{tenant_id}", f"email_{tenant_id}",
+                    f"monthly_{tenant_id}", f"yearly_{tenant_id}"):
             if scheduler.get_job(jid):
                 scheduler.remove_job(jid)
         _add_scrape_job(tenant_id, tenant.schedule_cron)
         cfg = tenant.email_config
-        if cfg and cfg.is_active and cfg.frequency != EmailFrequency.immediate:
-            _add_email_job(tenant_id, cfg.frequency, cfg.send_time)
+        if cfg and cfg.is_active:
+            if cfg.frequency != EmailFrequency.immediate:
+                _add_email_job(tenant_id, cfg.frequency, cfg.send_time)
+            if cfg.monthly_digest_enabled:
+                _add_monthly_job(tenant_id, cfg.monthly_digest_day,
+                                 cfg.monthly_digest_time)
+            if cfg.yearly_digest_enabled:
+                _add_yearly_job(tenant_id, cfg.yearly_digest_month,
+                                cfg.yearly_digest_day, cfg.yearly_digest_time)
     finally:
         db.close()
 

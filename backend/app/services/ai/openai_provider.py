@@ -13,6 +13,29 @@ from .stats import record_tokens
 
 logger = logging.getLogger(__name__)
 
+_LANG_NAMES = {
+    "en": "English", "pt": "Portuguese", "fr": "French", "es": "Spanish",
+    "de": "German", "it": "Italian", "nl": "Dutch", "pl": "Polish",
+    "ru": "Russian", "zh": "Chinese", "ja": "Japanese", "ar": "Arabic",
+}
+
+
+def _build_translation_instruction(accepted_languages: list[str] | None,
+                                    translation_language: str | None) -> str:
+    """Return an extra prompt line instructing the model to translate the summary
+    when the article language is not in the accepted list."""
+    if not accepted_languages or not translation_language:
+        return ""
+    lang_name = _LANG_NAMES.get(translation_language, translation_language.upper())
+    accepted = [_LANG_NAMES.get(l, l.upper()) for l in accepted_languages]
+    accepted_str = ", ".join(accepted)
+    return (
+        f"\n4. Detect the language of the article. "
+        f"If it is NOT one of [{accepted_str}], write the summary in {lang_name}. "
+        f"Otherwise write the summary in the article's original language.\n"
+    )
+
+
 _CATEGORIES = [
     "Technology", "Finance", "Business", "Politics", "Science",
     "Health", "Sports", "World News", "Environment", "Other"
@@ -89,17 +112,22 @@ class OpenAIProvider(AIProvider):
             logger.warning("Failed to parse JSON from AI response: %r", raw[:600])
             raise ValueError(f"Invalid JSON from AI: {cleaned[:300]}") from exc
 
-    def enrich_article(self, title, excerpt, topic_profile, categories) -> EnrichmentResult:
+    def enrich_article(self, title, excerpt, topic_profile, categories,
+                       accepted_languages=None, translation_language=None) -> EnrichmentResult:
         cats_str = ", ".join(categories) if categories else "Other"
+        translation_instruction = _build_translation_instruction(
+            accepted_languages, translation_language)
         if topic_profile:
             system = RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile)
             user = ENRICH_USER_TPL.format(
-                title=title, excerpt=(excerpt or "(none)")[:1500], categories=cats_str,
+                title=title, excerpt=(excerpt or "(none)")[:1500],
+                categories=cats_str, translation_instruction=translation_instruction,
             )
         else:
             system = None
             user = ENRICH_NO_PROFILE_TPL.format(
-                title=title, excerpt=(excerpt or "(none)")[:1500], categories=cats_str,
+                title=title, excerpt=(excerpt or "(none)")[:1500],
+                categories=cats_str, translation_instruction=translation_instruction,
             )
         raw = self._ask(user, max_tokens=800, system=system)
         # Strip markdown code fences (```json ... ``` or ``` ... ```)

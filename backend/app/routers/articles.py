@@ -20,6 +20,7 @@ def list_articles(
     from_date: Optional[datetime.date] = None,
     to_date: Optional[datetime.date] = None,
     is_read: Optional[bool] = None,
+    archived: Optional[bool] = None,   # None/False = pending queue; True = archive
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -27,6 +28,11 @@ def list_articles(
     q = (db.query(Article)
          .filter(Article.tenant_id == tenant_id,
                  Article.duplicate_of_id.is_(None)))
+
+    if archived is True:
+        q = q.filter(Article.archived_at.isnot(None))
+    else:
+        q = q.filter(Article.archived_at.is_(None))   # default: pending queue
 
     if source_id:
         q = q.filter(Article.source_id == source_id)
@@ -67,12 +73,12 @@ def list_articles(
 
 @router.get("/enrichment-status")
 def enrichment_status(tenant_id: int, db: Session = Depends(get_db)):
-    """Return AI enrichment progress counts for the tenant's articles."""
     from app.services.ai.stats import get_stats
     from app.services.scraper.runner import is_enrichment_paused
     base = db.query(Article).filter(
         Article.tenant_id == tenant_id,
         Article.duplicate_of_id.is_(None),
+        Article.archived_at.is_(None),
     )
     total = base.count()
     enriched = base.filter(Article.ai_enriched == True).count()
@@ -89,7 +95,6 @@ def enrichment_status(tenant_id: int, db: Session = Depends(get_db)):
 
 @router.post("/enrich-stop")
 def stop_enrichment(tenant_id: int):
-    """Pause AI enrichment for this tenant. Queued tasks exit immediately."""
     from app.services.scraper.runner import pause_tenant_enrichment
     pause_tenant_enrichment(tenant_id)
     return {"paused": True}
@@ -101,11 +106,6 @@ def trigger_enrichment(
     force: bool = False,
     db: Session = Depends(get_db),
 ):
-    """Queue AI enrichment for un-enriched articles.
-
-    force=true resets ai_enriched on all articles first, so already-enriched
-    articles are re-processed with the current AI provider and prompts.
-    """
     from app.services.scraper.runner import enrich_pending, resume_tenant_enrichment
     from app.services.ai.factory import get_ai_provider
     resume_tenant_enrichment(tenant_id)
@@ -115,17 +115,15 @@ def trigger_enrichment(
     except Exception as exc:
         raise HTTPException(400, f"AI provider error: {exc}")
     if isinstance(ai, NullProvider):
-        raise HTTPException(400, "No AI provider configured. Go to AI Settings and set up a provider first.")
-    # Quick smoke-test so we surface config problems before queuing hundreds of tasks
+        raise HTTPException(400, "No AI provider configured.")
     try:
         ai.summarize("test", "test")
     except Exception as exc:
-        raise HTTPException(400, f"AI provider is configured but not responding: {exc}")
+        raise HTTPException(400, f"AI provider not responding: {exc}")
     if force:
-        reset_count = (db.query(Article)
-                       .filter(Article.tenant_id == tenant_id)
-                       .update({"ai_enriched": False, "relevance_score": 0,
-                                "relevance_reason": None, "summary": None, "category": None}))
+        db.query(Article).filter(Article.tenant_id == tenant_id).update(
+            {"ai_enriched": False, "relevance_score": 0,
+             "relevance_reason": None, "summary": None, "category": None})
         db.commit()
     queued = enrich_pending(tenant_id, db)
     return {"queued": queued}
@@ -134,16 +132,115 @@ def trigger_enrichment(
 @router.patch("/read-all")
 def mark_all_read(tenant_id: int, db: Session = Depends(get_db)):
     count = (db.query(Article)
-             .filter(Article.tenant_id == tenant_id, Article.is_read == False)
+             .filter(Article.tenant_id == tenant_id,
+                     Article.is_read == False,
+                     Article.archived_at.is_(None))
              .update({"is_read": True}))
     db.commit()
     return {"marked_read": count}
 
 
-@router.delete("/")
-def clear_all_articles(tenant_id: int, db: Session = Depends(get_db)):
-    """Delete every article for a tenant so the feed can be re-scraped cleanly."""
-    count = db.query(Article).filter(Article.tenant_id == tenant_id).delete()
+@router.get("/dashboard")
+def dashboard(tenant_id: int, db: Session = Depends(get_db)):
+    from app.models import EmailConfig, ScrapeRun, RunStatus
+    from app.models.sent_digest import SentDigest
+
+    today_start = datetime.datetime.utcnow().replace(
+        hour=0, minute=0, second=0, microsecond=0)
+
+    scraped_today = (db.query(Article)
+                     .filter(Article.tenant_id == tenant_id,
+                             Article.scraped_at >= today_start)
+                     .count())
+
+    pending_count = (db.query(Article)
+                     .filter(Article.tenant_id == tenant_id,
+                             Article.archived_at.is_(None),
+                             Article.duplicate_of_id.is_(None))
+                     .count())
+
+    week_ago = datetime.datetime.utcnow() - datetime.timedelta(days=7)
+    recent_total = (db.query(Article)
+                    .filter(Article.tenant_id == tenant_id,
+                            Article.scraped_at >= week_ago,
+                            Article.duplicate_of_id.is_(None))
+                    .count())
+    recent_enriched = (db.query(Article)
+                       .filter(Article.tenant_id == tenant_id,
+                               Article.scraped_at >= week_ago,
+                               Article.ai_enriched == True)
+                       .count())
+    enrichment_rate = (round(recent_enriched / recent_total * 100)
+                       if recent_total else None)
+
+    last_digest = (db.query(SentDigest)
+                   .filter_by(tenant_id=tenant_id)
+                   .order_by(SentDigest.sent_at.desc())
+                   .first())
+
+    config: EmailConfig = (db.query(EmailConfig)
+                           .filter_by(tenant_id=tenant_id)
+                           .first())
+    next_send = None
+    if config and config.is_active and config.send_time:
+        try:
+            h, m = map(int, config.send_time.split(":"))
+            now = datetime.datetime.utcnow()
+            candidate = now.replace(hour=h, minute=m, second=0, microsecond=0)
+            if candidate <= now:
+                candidate += datetime.timedelta(days=1)
+            next_send = candidate.isoformat()
+        except Exception:
+            pass
+
+    recent_runs = (db.query(ScrapeRun)
+                   .filter_by(tenant_id=tenant_id)
+                   .order_by(ScrapeRun.started_at.desc())
+                   .limit(20)
+                   .all())
+    runs_ok = sum(1 for r in recent_runs if r.status == RunStatus.success)
+    runs_error = sum(1 for r in recent_runs if r.status == RunStatus.error)
+
+    return {
+        "scraped_today": scraped_today,
+        "pending_count": pending_count,
+        "enrichment_rate": enrichment_rate,
+        "last_digest_at": last_digest.sent_at.isoformat() if last_digest else None,
+        "last_digest_subject": last_digest.subject if last_digest else None,
+        "next_send_at": next_send,
+        "recent_runs_ok": runs_ok,
+        "recent_runs_error": runs_error,
+    }
+
+
+# ── Reset endpoints ────────────────────────────────────────────────────────────
+
+@router.delete("/reset/queue")
+def reset_queue(tenant_id: int, db: Session = Depends(get_db)):
+    count = (db.query(Article)
+             .filter(Article.tenant_id == tenant_id,
+                     Article.archived_at.is_(None))
+             .delete())
+    db.commit()
+    return {"deleted": count}
+
+
+@router.delete("/reset/archive")
+def reset_archive(tenant_id: int, db: Session = Depends(get_db)):
+    count = (db.query(Article)
+             .filter(Article.tenant_id == tenant_id,
+                     Article.archived_at.isnot(None))
+             .delete())
+    db.commit()
+    return {"deleted": count}
+
+
+@router.delete("/reset/scraped-urls")
+def reset_scraped_urls(tenant_id: int, db: Session = Depends(get_db)):
+    from app.models.scraped_url import ScrapedUrl
+    count = (db.query(ScrapedUrl)
+             .filter_by(tenant_id=tenant_id)
+             .delete())
     db.commit()
     return {"deleted": count}
 
@@ -167,6 +264,32 @@ def mark_read(article_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(article)
     return article
+
+
+@router.post("/{article_id}/re-enrich")
+def re_enrich_article(article_id: int, db: Session = Depends(get_db)):
+    """Reset and re-queue AI enrichment for a single article."""
+    import json
+    article = db.get(Article, article_id)
+    if not article:
+        raise HTTPException(404, "Article not found")
+    from app.models import Tenant
+    from app.services.scraper.runner import _enrich_article, _enrich_executor
+    tenant: Tenant = db.get(Tenant, article.tenant_id)
+    article.ai_enriched = False
+    article.relevance_score = 0.0
+    article.relevance_reason = None
+    article.summary = None
+    article.category = None
+    db.commit()
+    accepted_langs = json.loads(tenant.accepted_languages or "[]") or None
+    categories = json.loads(tenant.ai_categories or "[]") or None
+    _enrich_executor.submit(
+        _enrich_article, article_id,
+        tenant.topic_profile, categories,
+        accepted_langs, tenant.translation_language,
+    )
+    return {"queued": True}
 
 
 @router.delete("/{article_id}", status_code=204)

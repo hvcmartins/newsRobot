@@ -64,11 +64,26 @@ def test_send(tenant_id: int, db: Session = Depends(get_db)):
         raise HTTPException(500, f"Send failed: {exc}")
 
 
+@router.post("/{tenant_id}/send-now")
+def send_now(tenant_id: int, db: Session = Depends(get_db)):
+    """Manually trigger a digest send for all pending articles, regardless of schedule."""
+    from app.services.email.sender import send_digest_if_configured
+    _get_or_404(tenant_id, db)
+    try:
+        sent = send_digest_if_configured(tenant_id, None, "immediate", db)
+        if not sent:
+            raise HTTPException(400, "No pending articles or email config inactive")
+        return {"sent": True}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f"Send failed: {exc}")
+
+
 @router.get("/{tenant_id}/preview", response_class=HTMLResponse)
 def preview_email(tenant_id: int, db: Session = Depends(get_db)):
     from app.services.email.builder import build_email_context
     from app.services.email.sender import render_email
-    # preview=True: no time cutoff, no active-config/recipients requirement
     context = build_email_context(tenant_id, None, "preview", db, preview=True)
     if not context:
         return HTMLResponse("<p style='font-family:sans-serif;padding:32px;color:#666'>No articles yet — trigger a scrape from the News Feed page to populate your digest.</p>")

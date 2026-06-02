@@ -12,8 +12,10 @@ class TenantBase(BaseModel):
     global_keywords: Optional[str] = "[]"
     schedule_cron: str = "0 * * * *"
     topic_profile: Optional[str] = None
-    ai_categories: Optional[str] = None  # JSON list e.g. '["ASEAN Affairs", "EU News"]'
-    max_article_age_days: Optional[int] = None  # None = use global default (MAX_ARTICLE_AGE_DAYS env)
+    ai_categories: Optional[str] = None
+    max_article_age_days: Optional[int] = None
+    accepted_languages: Optional[str] = None    # JSON list e.g. '["en","pt","fr"]'
+    translation_language: Optional[str] = None  # e.g. "en"
 
 
 class TenantCreate(TenantBase):
@@ -37,6 +39,8 @@ class TenantUpdate(BaseModel):
     topic_profile: Optional[str] = None
     ai_categories: Optional[str] = None
     max_article_age_days: Optional[int] = None
+    accepted_languages: Optional[str] = None
+    translation_language: Optional[str] = None
 
 
 class TenantRead(TenantBase):

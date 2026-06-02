@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.models import Source, Article, ScrapeRun, RunStatus, SourceType, Tenant
+from app.models.scraped_url import ScrapedUrl
 from app.config import settings
 from .rss_scraper import RssScraper
 from .web_scraper import WebScraper
@@ -16,11 +17,8 @@ from .base import ScrapedArticle
 
 logger = logging.getLogger(__name__)
 
-# Single enrichment worker: SQLite can't handle concurrent writers, and llamacpp
-# already serializes inference via its own lock — extra threads only add contention.
 _enrich_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="enrich")
 
-# Per-tenant enrichment pause — tenant IDs in this set skip enrichment tasks.
 _paused_tenants: set[int] = set()
 _paused_lock = threading.Lock()
 
@@ -56,7 +54,6 @@ def _title_similarity(t1: str, t2: str) -> float:
 
 def _is_near_duplicate(article: ScrapedArticle, recent_articles: list[Article],
                         ai_provider) -> int | None:
-    """Return the ID of the duplicate article, or None if unique."""
     for existing in recent_articles:
         ratio = _title_similarity(article.title, existing.title)
         if ratio >= 0.85:
@@ -73,9 +70,26 @@ def _is_near_duplicate(article: ScrapedArticle, recent_articles: list[Article],
     return None
 
 
+def _record_scraped_url(db: Session, tenant_id: int, url: str) -> None:
+    """Insert into scraped_urls; silently ignore if already present."""
+    try:
+        row = ScrapedUrl(tenant_id=tenant_id, url=url)
+        db.add(row)
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+
+
+def _is_url_seen(db: Session, tenant_id: int, url: str) -> bool:
+    return (db.query(ScrapedUrl)
+            .filter_by(tenant_id=tenant_id, url=url)
+            .first()) is not None
+
+
 def _enrich_article(article_id: int, topic_profile: str | None,
-                    categories: list[str] | None = None) -> None:
-    """Run AI enrichment on a stored article in a background thread."""
+                    categories: list[str] | None = None,
+                    accepted_languages: list[str] | None = None,
+                    translation_language: str | None = None) -> None:
     import logging as _logging
     ai_log = _logging.getLogger("app.services.ai.enrichment")
 
@@ -83,7 +97,6 @@ def _enrich_article(article_id: int, topic_profile: str | None,
     from app.services.ai.factory import get_ai_provider, wait_for_ai
     from app.services.ai.null import NullProvider
 
-    # Yield if source discovery is currently using the model
     if not wait_for_ai(timeout=600):
         ai_log.info("Discovery held the AI for 10 min — proceeding anyway")
 
@@ -103,8 +116,6 @@ def _enrich_article(article_id: int, topic_profile: str | None,
 
         ai = get_ai_provider()
         if isinstance(ai, NullProvider):
-            # Real AI not configured yet — leave ai_enriched=False so articles
-            # are picked up again once the user sets up an AI provider.
             return
         title_short = article.title[:70]
 
@@ -112,6 +123,8 @@ def _enrich_article(article_id: int, topic_profile: str | None,
             result = ai.enrich_article(
                 article.title, article.excerpt or "",
                 topic_profile, categories or [],
+                accepted_languages=accepted_languages,
+                translation_language=translation_language,
             )
         except Exception as exc:
             ai_log.warning("enrich_article failed for '%s': %s", title_short, exc)
@@ -130,7 +143,8 @@ def _enrich_article(article_id: int, topic_profile: str | None,
             article.relevance_score = result.score
             article.relevance_reason = result.reason
 
-        article.summary = result.summary
+        if result.summary:
+            article.summary = result.summary
         article.category = result.category
         ai_log.info("Enriched '%s' → %s", title_short, result.category or "—")
 
@@ -177,7 +191,6 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         run.articles_found = len(articles)
         logger.info("Fetched %d article(s) from '%s'", len(articles), source.name)
 
-        # Load recent articles for duplicate detection (last 24h)
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
         recent = (db.query(Article)
                   .filter(Article.tenant_id == source.tenant_id,
@@ -195,7 +208,7 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         now = datetime.datetime.utcnow()
 
         for art in articles:
-            # Skip stale articles (e.g. RSS feeds that include year-old entries)
+            # Age filter — applies to both RSS and web scraper when date is available
             if art.published_at:
                 pub = art.published_at.replace(tzinfo=None)
                 if (now - pub) > max_age:
@@ -203,32 +216,12 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
                                  pub.date(), art.title[:70])
                     continue
 
-            # URL deduplication
-            existing = (db.query(Article)
-                        .filter_by(tenant_id=source.tenant_id, url=art.url)
-                        .first())
-            if existing:
+            # Persistent deduplication via scraped_urls (survives archiving/deletion)
+            if _is_url_seen(db, source.tenant_id, art.url):
                 continue
 
-            # Near-duplicate detection
             dup_id = _is_near_duplicate(art, recent, ai)
-
-            # Keyword-based relevance as initial score (AI enrichment runs async)
             score = _keyword_relevance(art, keywords)
-
-            # If topic_profile set and AI enabled, apply relevance gate synchronously
-            # for the gate decision (discard low-relevance articles)
-            if tenant.topic_profile and settings.ai_enabled:
-                try:
-                    result = ai.score_relevance(art.title, art.excerpt or "",
-                                                tenant.topic_profile)
-                    score = result.score
-                    if score < settings.ai_relevance_threshold:
-                        logger.info("Skipped (relevance %.2f): '%s'",
-                                    score, art.title[:70])
-                        continue
-                except Exception as exc:
-                    logger.warning("Relevance gate failed, keeping article: %s", exc)
 
             db_article = Article(
                 tenant_id=source.tenant_id,
@@ -245,6 +238,7 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
             db.add(db_article)
             try:
                 db.flush()
+                _record_scraped_url(db, source.tenant_id, art.url)
                 new_count += 1
                 new_article_ids.append(db_article.id)
                 recent.append(db_article)
@@ -257,14 +251,16 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         logger.info("Done '%s': %d new, %d already seen",
                     source.name, new_count, len(articles) - new_count)
 
-        # Async AI enrichment — submit to bounded pool so DB connections
-        # stay within the pool limit regardless of article count.
+        accepted_langs = json.loads(tenant.accepted_languages or "[]") or None
         tenant_categories = json.loads(tenant.ai_categories or "[]") or None
         if new_article_ids:
             logger.info("Queuing AI enrichment for %d article(s)", len(new_article_ids))
         for article_id in new_article_ids:
-            _enrich_executor.submit(_enrich_article, article_id,
-                                    tenant.topic_profile, tenant_categories)
+            _enrich_executor.submit(
+                _enrich_article, article_id,
+                tenant.topic_profile, tenant_categories,
+                accepted_langs, tenant.translation_language,
+            )
 
         source.last_scraped_at = datetime.datetime.utcnow()
         run.articles_new = new_count
@@ -302,18 +298,14 @@ def run_all_sources(tenant_id: int, db: Session) -> list[ScrapeRun]:
 
 
 def enrich_pending(tenant_id: int, db: Session) -> int:
-    """Queue AI enrichment for every un-enriched article of a tenant.
-
-    Safe to call at any time — articles already enriched are skipped inside
-    _enrich_article. Returns the number of articles queued.
-    """
     tenant: Tenant = db.get(Tenant, tenant_id)
     topic_profile = tenant.topic_profile if tenant else None
     categories = json.loads(tenant.ai_categories or "[]") if tenant else None
     categories = categories or None
+    accepted_langs = json.loads(tenant.accepted_languages or "[]") if tenant else None
+    accepted_langs = accepted_langs or None
+    translation_lang = tenant.translation_language if tenant else None
 
-    # Use isnot(True) rather than == False so that NULL values (legacy rows
-    # added before the column existed) are also picked up.
     pending = (db.query(Article)
                .filter(Article.tenant_id == tenant_id,
                        Article.ai_enriched.isnot(True),
@@ -321,7 +313,10 @@ def enrich_pending(tenant_id: int, db: Session) -> int:
                .all())
     count = 0
     for a in pending:
-        _enrich_executor.submit(_enrich_article, a.id, topic_profile, categories)
+        _enrich_executor.submit(
+            _enrich_article, a.id, topic_profile, categories,
+            accepted_langs, translation_lang,
+        )
         count += 1
 
     logger.info("Queued enrichment for %d pending articles (tenant %d)", count, tenant_id)

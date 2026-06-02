@@ -5,128 +5,222 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ tenant_name }} News Digest</title>
   <style>
-    body { margin: 0; padding: 0; background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
-    .wrapper { max-width: 620px; margin: 24px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-    .header { background: {{ primary_color }}; padding: 28px 32px; text-align: center; }
-    .header img { max-height: 56px; margin-bottom: 12px; display: block; margin-left: auto; margin-right: auto; }
-    .header h1 { color: #ffffff; margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
-    .header p { color: rgba(255,255,255,0.8); margin: 6px 0 0; font-size: 13px; }
-    .intro { padding: 20px 32px; color: #555; font-size: 14px; line-height: 1.6; border-bottom: 1px solid #eee; }
-    /* Category section header */
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color: #1a1a1a; }
+    .wrapper { max-width: 640px; margin: 24px auto; background: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.10); }
+
+    /* ── Header ── */
+    .header { background: {{ primary_color }}; padding: 0 40px; }
+    .header-top { display: flex; align-items: center; justify-content: space-between; padding: 24px 0 20px; border-bottom: 1px solid rgba(255,255,255,0.18); }
+    .header-logo img { max-height: 44px; display: block; }
+    .header-logo-text { color: #fff; font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+    .header-date { color: rgba(255,255,255,0.75); font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap; }
+    .header-headline { padding: 20px 0 28px; }
+    .header-headline h1 { margin: 0; color: #fff; font-size: 22px; font-weight: 700; line-height: 1.3; letter-spacing: -0.2px; }
+    .header-headline p { margin: 6px 0 0; color: rgba(255,255,255,0.75); font-size: 13px; }
+
+    /* ── Intro ── */
+    .intro { padding: 20px 40px; font-size: 14px; color: #555; line-height: 1.7; border-bottom: 1px solid #f0f0f0; }
+
+    /* ── Category section ── */
     .category-section { }
-    .category-header {
-      padding: 10px 32px;
-      background: #f8f9fa;
-      border-left: 3px solid {{ primary_color }};
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: {{ primary_color }};
-    }
-    /* Articles */
-    .article { padding: 20px 32px; border-bottom: 1px solid #eee; }
-    .article:last-of-type { border-bottom: none; }
-    .article img { width: 100%; max-height: 200px; object-fit: cover; border-radius: 6px; margin-bottom: 12px; display: block; }
-    .article-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-    .source-dot { width: 8px; height: 8px; border-radius: 50%; background: {{ primary_color }}; display: inline-block; flex-shrink: 0; }
+    .category-header { padding: 12px 40px; background: #f8f9fa; border-left: 3px solid {{ primary_color }}; display: flex; align-items: center; gap: 10px; }
+    .category-header span { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: {{ primary_color }}; }
+    .category-count { font-size: 10px; color: #999; font-weight: 500; }
+
+    /* ── Featured card (first article per category) ── */
+    .article-featured { padding: 28px 40px; border-bottom: 1px solid #f0f0f0; }
+    .article-featured .thumb { width: 100%; max-height: 220px; object-fit: cover; border-radius: 8px; margin-bottom: 16px; display: block; }
+    .article-featured .meta { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .article-featured h2 { margin: 0 0 10px; font-size: 19px; font-weight: 700; line-height: 1.35; }
+    .article-featured h2 a { color: #111; text-decoration: none; }
+    .article-featured h2 a:hover { color: {{ primary_color }}; }
+    .article-featured p { margin: 0 0 12px; font-size: 14px; color: #555; line-height: 1.65; }
+    .article-featured .read-more { display: inline-block; color: {{ primary_color }}; font-size: 13px; font-weight: 600; text-decoration: none; }
+    .article-featured .read-more:hover { text-decoration: underline; }
+
+    /* ── Compact list articles ── */
+    .article-list { display: flex; padding: 18px 40px; gap: 14px; border-bottom: 1px solid #f0f0f0; align-items: flex-start; }
+    .article-list .thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 6px; flex-shrink: 0; display: block; }
+    .article-list .thumb-placeholder { width: 80px; height: 60px; border-radius: 6px; flex-shrink: 0; background: #f0f0f0; }
+    .article-list .content { flex: 1; min-width: 0; }
+    .article-list h3 { margin: 0 0 5px; font-size: 14px; font-weight: 600; line-height: 1.4; }
+    .article-list h3 a { color: #111; text-decoration: none; }
+    .article-list h3 a:hover { color: {{ primary_color }}; }
+    .article-list p { margin: 0 0 6px; font-size: 12px; color: #777; line-height: 1.55; }
+
+    /* ── Shared meta elements ── */
+    .source-chip { display: inline-flex; align-items: center; gap: 5px; }
+    .source-dot { width: 7px; height: 7px; border-radius: 50%; background: {{ primary_color }}; flex-shrink: 0; }
     .source-name { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #888; }
-    .category-badge { font-size: 10px; background: #f0f2f5; color: #666; padding: 2px 7px; border-radius: 10px; font-weight: 500; }
-    .article h2 { margin: 0 0 8px; font-size: 16px; line-height: 1.4; font-weight: 600; }
-    .article h2 a { color: #1a1a1a; text-decoration: none; }
-    .article h2 a:hover { color: {{ primary_color }}; }
-    .article p { margin: 0 0 10px; font-size: 13px; color: #666; line-height: 1.6; }
-    .article .date { font-size: 11px; color: #aaa; }
-    .relevance-bar { display: inline-block; width: 40px; height: 3px; border-radius: 2px; background: #eee; vertical-align: middle; margin-left: 6px; position: relative; overflow: hidden; }
-    .relevance-fill { position: absolute; left: 0; top: 0; height: 100%; background: {{ primary_color }}; }
-    .footer { background: #f8f9fa; padding: 20px 32px; text-align: center; font-size: 11px; color: #aaa; line-height: 1.6; }
-    .footer a { color: #aaa; }
+    .cat-badge { font-size: 10px; background: rgba(0,0,0,0.06); color: #666; padding: 2px 8px; border-radius: 10px; font-weight: 500; white-space: nowrap; }
+    .article-date { font-size: 11px; color: #bbb; }
+    .relevance-bar { display: inline-block; width: 36px; height: 3px; border-radius: 2px; background: #eee; vertical-align: middle; position: relative; overflow: hidden; }
+    .relevance-fill { position: absolute; left: 0; top: 0; height: 100%; background: {{ primary_color }}; opacity: 0.7; }
+
+    /* ── Footer ── */
+    .footer { background: #f8f9fa; padding: 22px 40px; text-align: center; font-size: 11px; color: #aaa; line-height: 1.7; border-top: 1px solid #eee; }
+    .footer a { color: #aaa; text-decoration: underline; }
+
+    /* ── Mobile ── */
+    @media (max-width: 480px) {
+      .wrapper { margin: 0; border-radius: 0; }
+      .header, .article-featured, .intro, .footer { padding-left: 20px; padding-right: 20px; }
+      .article-list { padding-left: 20px; padding-right: 20px; }
+      .category-header { padding-left: 20px; padding-right: 20px; }
+      .article-list .thumb, .article-list .thumb-placeholder { display: none; }
+    }
   </style>
 </head>
 <body>
 <div class="wrapper">
+
+  <!-- Header -->
   <div class="header">
-    {% if logo_url %}<img src="{{ logo_url }}" alt="{{ tenant_name }} logo">{% endif %}
-    <h1>{{ tenant_name }} — News Digest</h1>
-    <p>{{ date }}</p>
+    <div class="header-top">
+      <div class="header-logo">
+        {% if logo_url %}<img src="{{ logo_url }}" alt="{{ tenant_name }}">
+        {% else %}<span class="header-logo-text">{{ tenant_name }}</span>{% endif %}
+      </div>
+      <span class="header-date">{{ date }}</span>
+    </div>
+    <div class="header-headline">
+      <h1>{{ tenant_name }} — News Digest</h1>
+      {% set total = articles|length %}
+      <p>{{ total }} article{{ 's' if total != 1 else '' }} curated for you</p>
+    </div>
   </div>
 
   {% if intro_text %}
   <div class="intro">{{ intro_text }}</div>
   {% endif %}
 
+  <!-- Articles -->
   {% if has_categories %}
-    {# Render articles grouped by AI-assigned topic category #}
     {% for category, cat_articles in articles_by_category %}
     <div class="category-section">
       {% if category != "General" %}
-      <div class="category-header">{{ category }}</div>
-      {% endif %}
-      {% for article in cat_articles %}
-      <div class="article">
-        {% if article.image_url %}
-        <img src="{{ article.image_url }}" alt="">
-        {% endif %}
-
-        <div class="article-meta">
-          <span class="source-dot"></span>
-          <span class="source-name">{{ article.source.name }}</span>
-          {% if article.relevance_score > 0 %}
-          <span class="relevance-bar"><span class="relevance-fill" style="width:{{ (article.relevance_score * 100)|int }}%"></span></span>
-          {% endif %}
-        </div>
-
-        <h2><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a></h2>
-
-        {% set display_text = article.summary or article.excerpt %}
-        {% if display_text %}
-        <p>{{ display_text }}</p>
-        {% endif %}
-
-        <div class="date">
-          {% if article.published_at %}{{ article.published_at.strftime("%B %d, %Y") }}{% endif %}
-        </div>
+      <div class="category-header">
+        <span>{{ category }}</span>
+        <span class="category-count">{{ cat_articles|length }}</span>
       </div>
+      {% endif %}
+
+      {% for article in cat_articles %}
+        {% if loop.first %}
+        <!-- Featured article -->
+        <div class="article-featured">
+          {% if article.image_url %}
+          <img class="thumb" src="{{ article.image_url }}" alt="">
+          {% endif %}
+          <div class="meta">
+            <span class="source-chip">
+              <span class="source-dot"></span>
+              <span class="source-name">{{ article.source.name }}</span>
+            </span>
+            {% if article.relevance_score > 0 %}
+            <span class="relevance-bar"><span class="relevance-fill" style="width:{{ (article.relevance_score * 100)|int }}%"></span></span>
+            {% endif %}
+            {% if article.published_at %}
+            <span class="article-date">{{ article.published_at.strftime("%b %d") }}</span>
+            {% endif %}
+          </div>
+          <h2><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a></h2>
+          {% set display_text = article.summary or article.excerpt %}
+          {% if display_text %}<p>{{ display_text[:280] }}{% if display_text|length > 280 %}…{% endif %}</p>{% endif %}
+          <a class="read-more" href="{{ article.url }}" target="_blank" rel="noopener">Read full article →</a>
+        </div>
+        {% else %}
+        <!-- Compact list article -->
+        <div class="article-list">
+          {% if article.image_url %}
+          <img class="thumb" src="{{ article.image_url }}" alt="">
+          {% else %}
+          <div class="thumb-placeholder"></div>
+          {% endif %}
+          <div class="content">
+            <div class="meta" style="display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap;">
+              <span class="source-chip">
+                <span class="source-dot"></span>
+                <span class="source-name">{{ article.source.name }}</span>
+              </span>
+              {% if article.published_at %}
+              <span class="article-date">{{ article.published_at.strftime("%b %d") }}</span>
+              {% endif %}
+            </div>
+            <h3><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a></h3>
+            {% set display_text = article.summary or article.excerpt %}
+            {% if display_text %}<p>{{ display_text[:150] }}{% if display_text|length > 150 %}…{% endif %}</p>{% endif %}
+          </div>
+        </div>
+        {% endif %}
       {% endfor %}
     </div>
     {% endfor %}
+
   {% else %}
-    {# Flat list (AI not enabled or articles not yet enriched) #}
+    <!-- Flat list (no categories) -->
     {% for article in articles %}
-    <div class="article">
-      {% if article.image_url %}
-      <img src="{{ article.image_url }}" alt="">
-      {% endif %}
-
-      <div class="article-meta">
-        <span class="source-dot"></span>
-        <span class="source-name">{{ article.source.name }}</span>
-        {% if article.category and article.category not in ('Uncategorized', 'Other') %}
-        <span class="category-badge">{{ article.category }}</span>
+      {% if loop.first %}
+      <div class="article-featured">
+        {% if article.image_url %}
+        <img class="thumb" src="{{ article.image_url }}" alt="">
         {% endif %}
-        {% if article.relevance_score > 0 %}
-        <span class="relevance-bar"><span class="relevance-fill" style="width:{{ (article.relevance_score * 100)|int }}%"></span></span>
+        <div class="meta">
+          <span class="source-chip">
+            <span class="source-dot"></span>
+            <span class="source-name">{{ article.source.name }}</span>
+          </span>
+          {% if article.category and article.category not in ('Uncategorized', 'Other') %}
+          <span class="cat-badge">{{ article.category }}</span>
+          {% endif %}
+          {% if article.relevance_score > 0 %}
+          <span class="relevance-bar"><span class="relevance-fill" style="width:{{ (article.relevance_score * 100)|int }}%"></span></span>
+          {% endif %}
+          {% if article.published_at %}
+          <span class="article-date">{{ article.published_at.strftime("%b %d") }}</span>
+          {% endif %}
+        </div>
+        <h2><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a></h2>
+        {% set display_text = article.summary or article.excerpt %}
+        {% if display_text %}<p>{{ display_text[:280] }}{% if display_text|length > 280 %}…{% endif %}</p>{% endif %}
+        <a class="read-more" href="{{ article.url }}" target="_blank" rel="noopener">Read full article →</a>
+      </div>
+      {% else %}
+      <div class="article-list">
+        {% if article.image_url %}
+        <img class="thumb" src="{{ article.image_url }}" alt="">
+        {% else %}
+        <div class="thumb-placeholder"></div>
         {% endif %}
+        <div class="content">
+          <div class="meta" style="display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap;">
+            <span class="source-chip">
+              <span class="source-dot"></span>
+              <span class="source-name">{{ article.source.name }}</span>
+            </span>
+            {% if article.category and article.category not in ('Uncategorized', 'Other') %}
+            <span class="cat-badge">{{ article.category }}</span>
+            {% endif %}
+            {% if article.published_at %}
+            <span class="article-date">{{ article.published_at.strftime("%b %d") }}</span>
+            {% endif %}
+          </div>
+          <h3><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a></h3>
+          {% set display_text = article.summary or article.excerpt %}
+          {% if display_text %}<p>{{ display_text[:150] }}{% if display_text|length > 150 %}…{% endif %}</p>{% endif %}
+        </div>
       </div>
-
-      <h2><a href="{{ article.url }}" target="_blank" rel="noopener">{{ article.title }}</a></h2>
-
-      {% set display_text = article.summary or article.excerpt %}
-      {% if display_text %}
-      <p>{{ display_text }}</p>
       {% endif %}
-
-      <div class="date">
-        {% if article.published_at %}{{ article.published_at.strftime("%B %d, %Y") }}{% endif %}
-      </div>
-    </div>
     {% endfor %}
   {% endif %}
 
+  <!-- Footer -->
   <div class="footer">
-    You are receiving this email because you subscribed to {{ tenant_name }} news alerts.<br>
-    <a href="{{ articles[0].url if articles else '#' }}">View latest news</a>
+    You are receiving this because you subscribed to <strong>{{ tenant_name }}</strong> news alerts.<br>
+    Powered by <a href="#">NewsRobot</a>
   </div>
+
 </div>
 </body>
 </html>

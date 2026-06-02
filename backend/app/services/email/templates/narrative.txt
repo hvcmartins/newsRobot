@@ -1,0 +1,8 @@
+{{ tenant_name }} — {% if digest_type == 'monthly' %}Monthly Review{% else %}Year in Review{% endif %}
+{{ label }}
+================================================================================
+
+{{ summary_text }}
+
+--------------------------------------------------------------------------------
+{{ tenant_name }} news digest

@@ -17,6 +17,8 @@ class Tenant(Base):
     topic_profile = Column(Text, nullable=True)
     ai_categories = Column(Text, nullable=True)  # JSON list generated from profile
     max_article_age_days = Column(Integer, nullable=True)  # None = use global default
+    accepted_languages = Column(Text, nullable=True)    # JSON list e.g. '["en","pt","fr"]'
+    translation_language = Column(String(10), nullable=True)  # e.g. "en"
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow,

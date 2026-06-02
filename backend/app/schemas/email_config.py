@@ -20,6 +20,13 @@ class EmailConfigBase(BaseModel):
     subject_template: str = "{{tenant_name}} News Digest – {{date}}"
     intro_text: Optional[str] = None
     is_active: bool = True
+    monthly_digest_enabled: bool = False
+    monthly_digest_day: int = 1
+    monthly_digest_time: str = "08:00"
+    yearly_digest_enabled: bool = False
+    yearly_digest_month: int = 1
+    yearly_digest_day: int = 1
+    yearly_digest_time: str = "08:00"
 
 
 class EmailConfigCreate(EmailConfigBase):
@@ -41,6 +48,13 @@ class EmailConfigUpdate(BaseModel):
     subject_template: Optional[str] = None
     intro_text: Optional[str] = None
     is_active: Optional[bool] = None
+    monthly_digest_enabled: Optional[bool] = None
+    monthly_digest_day: Optional[int] = None
+    monthly_digest_time: Optional[str] = None
+    yearly_digest_enabled: Optional[bool] = None
+    yearly_digest_month: Optional[int] = None
+    yearly_digest_day: Optional[int] = None
+    yearly_digest_time: Optional[str] = None
 
 
 class EmailConfigRead(EmailConfigBase):

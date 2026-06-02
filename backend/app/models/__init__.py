@@ -5,6 +5,9 @@ from .article import Article
 from .email_config import EmailConfig, EmailFrequency
 from .scrape_run import ScrapeRun, RunStatus
 from .ai_config import AIConfig
+from .scraped_url import ScrapedUrl
+from .sent_digest import SentDigest, DigestType
+from .monthly_summary import MonthlySummary
 
 __all__ = [
     "CatalogSource", "CatalogSourceType",
@@ -14,4 +17,7 @@ __all__ = [
     "EmailConfig", "EmailFrequency",
     "ScrapeRun", "RunStatus",
     "AIConfig",
+    "ScrapedUrl",
+    "SentDigest", "DigestType",
+    "MonthlySummary",
 ]

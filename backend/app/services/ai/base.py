@@ -309,7 +309,7 @@ Complete all in one pass:
 2. If score ≥ 0.5: write a 2–3 sentence factual summary and pick the best \
 category from: {categories}
 3. If score < 0.5: set summary and category to null — no need to generate them.
-
+{translation_instruction}
 Return JSON only:
 {{"score": 0.0, "reason": "<one sentence>", \
 "summary": "<2-3 sentences>" or null, "category": "<name>" or null}}"""
@@ -321,9 +321,37 @@ Excerpt: {excerpt}
 
 1. Write a 2–3 sentence factual summary.
 2. Pick the best category from: {categories}
-
+{translation_instruction}
 Return JSON only:
 {{"summary": "<2-3 sentences>", "category": "<name>"}}"""
+
+# Monthly/yearly narrative digest prompts
+MONTHLY_NARRATIVE_TPL = """\
+You are writing the monthly news digest for {tenant_name}.
+
+Below are the article titles and summaries published during {month_label}:
+
+{articles_text}
+
+Write a concise, engaging narrative summary (4-6 paragraphs) of the key news \
+themes and developments from this month. Group related topics together. \
+Use a professional journalistic tone. Do not list articles individually — \
+synthesise them into a coherent narrative.
+
+Write the summary in {language}."""
+
+YEARLY_NARRATIVE_TPL = """\
+You are writing the annual review for {tenant_name}.
+
+Below are the monthly summaries from {year}:
+
+{months_text}
+
+Write a thoughtful, engaging narrative (6-8 paragraphs) reviewing the key \
+themes, trends, and developments of the year. Identify patterns across months. \
+Use a professional journalistic tone.
+
+Write the summary in {language}."""
 
 
 @dataclass
@@ -373,7 +401,9 @@ class AIProvider(ABC):
 
     def enrich_article(self, title: str, excerpt: str,
                        topic_profile: str | None,
-                       categories: list[str]) -> "EnrichmentResult":
+                       categories: list[str],
+                       accepted_languages: list[str] | None = None,
+                       translation_language: str | None = None) -> "EnrichmentResult":
         """Score relevance, summarise, and categorise in one shot.
 
         Default: chains individual methods (safe for all providers).
@@ -390,6 +420,26 @@ class AIProvider(ABC):
         category = self.categorize(title, excerpt, categories)
         return EnrichmentResult(score=score, reason=reason,
                                 summary=summary, category=category)
+
+    def summarize_monthly(self, tenant_name: str, month_label: str,
+                          articles_text: str, language: str = "English") -> str:
+        """Generate a narrative monthly digest summary."""
+        from .base import MONTHLY_NARRATIVE_TPL
+        prompt = MONTHLY_NARRATIVE_TPL.format(
+            tenant_name=tenant_name, month_label=month_label,
+            articles_text=articles_text, language=language,
+        )
+        return self.summarize(prompt, "")
+
+    def summarize_yearly(self, tenant_name: str, year: int,
+                         months_text: str, language: str = "English") -> str:
+        """Generate a narrative yearly digest summary."""
+        from .base import YEARLY_NARRATIVE_TPL
+        prompt = YEARLY_NARRATIVE_TPL.format(
+            tenant_name=tenant_name, year=year,
+            months_text=months_text, language=language,
+        )
+        return self.summarize(prompt, "")
 
     @abstractmethod
     def recommend_sources(self, topic_profile: str,
