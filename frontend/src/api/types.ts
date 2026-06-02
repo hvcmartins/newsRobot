@@ -11,6 +11,7 @@ export interface Tenant {
   max_article_age_days: number | null
   accepted_languages: string | null   // JSON list e.g. '["en","pt","fr"]'
   translation_language: string | null // e.g. "en"
+  scrape_paused: boolean
   created_at: string
   updated_at: string
 }

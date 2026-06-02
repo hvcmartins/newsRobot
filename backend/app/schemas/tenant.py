@@ -46,5 +46,6 @@ class TenantUpdate(BaseModel):
 class TenantRead(TenantBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    scrape_paused: bool = False
     created_at: datetime.datetime
     updated_at: datetime.datetime

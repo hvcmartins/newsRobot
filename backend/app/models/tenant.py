@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -19,6 +19,7 @@ class Tenant(Base):
     max_article_age_days = Column(Integer, nullable=True)  # None = use global default
     accepted_languages = Column(Text, nullable=True)    # JSON list e.g. '["en","pt","fr"]'
     translation_language = Column(String(10), nullable=True)  # e.g. "en"
+    scrape_paused = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow,

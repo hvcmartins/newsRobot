@@ -4,13 +4,14 @@ import { formatDistanceToNow } from 'date-fns'
 import { useTenant } from '@/contexts/TenantContext'
 import { articleApi } from '@/api/articles'
 import { sourceApi } from '@/api/sources'
-import { scrapeRunApi } from '@/api/scrapeRuns'
+import { tenantApi } from '@/api/tenants'
 import ArticleFeed from '@/components/articles/ArticleFeed'
+
 import ArticleFilters, { Filters } from '@/components/articles/ArticleFilters'
 import Button from '@/components/ui/Button'
 
 export default function ArticlesPage() {
-  const { activeTenant } = useTenant()
+  const { activeTenant, refreshTenants } = useTenant()
   const qc = useQueryClient()
   const [filters, setFilters] = useState<Filters>({})
   const [page, setPage] = useState(1)
@@ -53,11 +54,14 @@ export default function ArticlesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['articles', tenantId] }),
   })
 
-  const scrapeMut = useMutation({
-    mutationFn: () => scrapeRunApi.triggerFull(tenantId),
-    onSuccess: () => {
-      setTimeout(() => qc.invalidateQueries({ queryKey: ['articles', tenantId] }), 3000)
-    },
+  const pauseMut = useMutation({
+    mutationFn: () => tenantApi.pauseScrape(activeTenant!.slug),
+    onSuccess: () => refreshTenants(),
+  })
+
+  const resumeMut = useMutation({
+    mutationFn: () => tenantApi.resumeScrape(activeTenant!.slug),
+    onSuccess: () => refreshTenants(),
   })
 
   const [enrichError, setEnrichError] = useState<string | null>(null)
@@ -117,6 +121,8 @@ export default function ArticlesPage() {
     ? formatDistanceToNow(new Date(dashboard.next_send_at), { addSuffix: true })
     : null
 
+  const scrapePaused = activeTenant?.scrape_paused ?? false
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -126,7 +132,7 @@ export default function ArticlesPage() {
             {data?.total != null
               ? `${data.total} article${data.total !== 1 ? 's' : ''} pending`
               : 'Pending articles awaiting your next digest'}
-            {nextSend && (
+            {nextSend && !scrapePaused && (
               <span style={{ marginLeft: 8, color: 'var(--brand-color)', fontWeight: 500 }}>
                 · Next send {nextSend}
               </span>
@@ -134,11 +140,41 @@ export default function ArticlesPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button size="sm" loading={scrapeMut.isPending} onClick={() => scrapeMut.mutate()}>
-            🔄 Scrape now
-          </Button>
+          {scrapePaused ? (
+            <Button
+              size="sm"
+              loading={resumeMut.isPending}
+              onClick={() => resumeMut.mutate()}
+              style={{ background: '#2e7d32', borderColor: '#2e7d32' }}
+            >
+              ▶ Resume scraping
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={pauseMut.isPending}
+              onClick={() => pauseMut.mutate()}
+            >
+              ⏸ Pause scraping
+            </Button>
+          )}
         </div>
       </div>
+
+      {scrapePaused && (
+        <div style={{
+          background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 8,
+          padding: '10px 14px', fontSize: 13, color: '#795548',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        }}>
+          <span>⏸ Scraping is paused — no new articles will be fetched until you resume.</span>
+          <Button size="sm" loading={resumeMut.isPending} onClick={() => resumeMut.mutate()}
+            style={{ fontSize: 11, padding: '3px 10px', background: '#2e7d32', borderColor: '#2e7d32' }}>
+            ▶ Resume
+          </Button>
+        </div>
+      )}
 
       {/* AI enrichment progress banner */}
       {(enrichTotal > 0 || enrichError) && (
@@ -211,11 +247,6 @@ export default function ArticlesPage() {
         onChange={handleFilterChange}
       />
 
-      {scrapeMut.isSuccess && (
-        <p style={{ fontSize: 13, color: 'var(--brand-color)', background: 'var(--brand-color-light)', padding: '8px 12px', borderRadius: 6 }}>
-          Scrape triggered — new articles will appear shortly.
-        </p>
-      )}
 
       <ArticleFeed
         articles={data?.items ?? []}

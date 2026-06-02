@@ -15,10 +15,14 @@ def _make_scrape_job(tenant_id: int):
         db = SessionLocal()
         try:
             tenant = db.get(Tenant, tenant_id)
-            name = tenant.name if tenant else f"tenant {tenant_id}"
-            logger.info("Scheduled scrape triggered for '%s'", name)
+            if not tenant:
+                return
+            if getattr(tenant, 'scrape_paused', False):
+                logger.info("Scrape skipped — paused for '%s'", tenant.name)
+                return
+            logger.info("Scheduled scrape triggered for '%s'", tenant.name)
             run_all_sources(tenant_id, db)
-            logger.info("Scheduled scrape complete for '%s'", name)
+            logger.info("Scheduled scrape complete for '%s'", tenant.name)
         except Exception as exc:
             logger.error("Scheduled scrape failed for tenant %d: %s", tenant_id, exc)
         finally:

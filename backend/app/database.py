@@ -56,6 +56,7 @@ def _migrate():
     _add_column_if_missing("tenants", "max_article_age_days", "INTEGER")
     _add_column_if_missing("tenants", "accepted_languages", "TEXT")
     _add_column_if_missing("tenants", "translation_language", "VARCHAR(10)")
+    _add_column_if_missing("tenants", "scrape_paused", "BOOLEAN DEFAULT 0")
     _add_column_if_missing("email_configs", "lookback_hours", "INTEGER DEFAULT 24")
     _add_column_if_missing("email_configs", "schedule_overrides", "TEXT")
     _add_column_if_missing("email_configs", "monthly_digest_enabled", "BOOLEAN DEFAULT 0")

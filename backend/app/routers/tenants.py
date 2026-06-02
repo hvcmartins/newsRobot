@@ -62,6 +62,28 @@ def delete_tenant(slug: str, db: Session = Depends(get_db)):
             scheduler.remove_job(jid)
 
 
+@router.post("/{slug}/pause-scrape", response_model=TenantRead)
+def pause_scrape(slug: str, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter_by(slug=slug).first()
+    if not tenant:
+        raise HTTPException(404, "Tenant not found")
+    tenant.scrape_paused = True
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+
+@router.post("/{slug}/resume-scrape", response_model=TenantRead)
+def resume_scrape(slug: str, db: Session = Depends(get_db)):
+    tenant = db.query(Tenant).filter_by(slug=slug).first()
+    if not tenant:
+        raise HTTPException(404, "Tenant not found")
+    tenant.scrape_paused = False
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+
 @router.post("/{slug}/suggest-keywords")
 def suggest_keywords(slug: str, db: Session = Depends(get_db)):
     tenant = db.query(Tenant).filter_by(slug=slug).first()

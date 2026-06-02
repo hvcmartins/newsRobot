@@ -11,6 +11,10 @@ export const tenantApi = {
     return client.patch<Tenant>(`/api/tenants/${slug}`, data).then((r) => r.data)
   },
   delete: (slug: string) => client.delete(`/api/tenants/${slug}`),
+  pauseScrape: (slug: string) =>
+    client.post<Tenant>(`/api/tenants/${slug}/pause-scrape`).then((r) => r.data),
+  resumeScrape: (slug: string) =>
+    client.post<Tenant>(`/api/tenants/${slug}/resume-scrape`).then((r) => r.data),
   suggestKeywords: (slug: string) =>
     client.post<{ keywords: string[] }>(`/api/tenants/${slug}/suggest-keywords`).then((r) => r.data),
   suggestCategories: (slug: string) =>
