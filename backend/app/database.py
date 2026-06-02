@@ -65,6 +65,7 @@ def _migrate():
     _add_column_if_missing("email_configs", "yearly_digest_month", "INTEGER DEFAULT 1")
     _add_column_if_missing("email_configs", "yearly_digest_day", "INTEGER DEFAULT 1")
     _add_column_if_missing("email_configs", "yearly_digest_time", "VARCHAR(5) DEFAULT '08:00'")
+    _add_column_if_missing("email_configs", "send_days", "TEXT")
     _fix_empty_slugs()
 
 

@@ -112,7 +112,8 @@ def load_tenant_jobs():
             if tenant.email_config and tenant.email_config.is_active:
                 cfg = tenant.email_config
                 if cfg.frequency != EmailFrequency.immediate:
-                    _add_email_job(tenant.id, cfg.frequency, cfg.send_time)
+                    _add_email_job(tenant.id, cfg.frequency, cfg.send_time,
+                                   getattr(cfg, 'send_days', None))
                 if cfg.monthly_digest_enabled:
                     _add_monthly_job(tenant.id, cfg.monthly_digest_day,
                                      cfg.monthly_digest_time)
@@ -138,10 +139,20 @@ def _add_scrape_job(tenant_id: int, cron: str):
         logger.error("Failed to add scrape job for tenant %d: %s", tenant_id, exc)
 
 
-def _add_email_job(tenant_id: int, frequency: str, send_time: str):
+def _add_email_job(tenant_id: int, frequency: str, send_time: str, send_days: str | None = None):
     try:
+        import json as _json
         h, m = send_time.split(":")
-        if frequency == "daily":
+        days: list | None = None
+        if send_days:
+            try:
+                days = _json.loads(send_days)
+            except Exception:
+                pass
+        if days:
+            trigger = CronTrigger(day_of_week=",".join(days),
+                                  hour=int(h), minute=int(m), timezone="UTC")
+        elif frequency == "daily":
             trigger = CronTrigger(hour=int(h), minute=int(m), timezone="UTC")
         else:
             trigger = CronTrigger(day_of_week="mon", hour=int(h),
@@ -173,7 +184,8 @@ def refresh_tenant_job(tenant_id: int):
         cfg = tenant.email_config
         if cfg and cfg.is_active:
             if cfg.frequency != EmailFrequency.immediate:
-                _add_email_job(tenant_id, cfg.frequency, cfg.send_time)
+                _add_email_job(tenant_id, cfg.frequency, cfg.send_time,
+                               getattr(cfg, 'send_days', None))
             if cfg.monthly_digest_enabled:
                 _add_monthly_job(tenant_id, cfg.monthly_digest_day,
                                  cfg.monthly_digest_time)

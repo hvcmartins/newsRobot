@@ -5,7 +5,6 @@ export interface Filters {
   source_id?: number
   keyword?: string
   category?: string
-  is_read?: boolean
 }
 
 interface Props {
@@ -52,16 +51,7 @@ export default function ArticleFilters({ sources, categories, filters, onChange 
         </select>
       )}
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#555', cursor: 'pointer' }}>
-        <input
-          type="checkbox"
-          checked={filters.is_read === false}
-          onChange={(e) => set({ is_read: e.target.checked ? false : undefined })}
-        />
-        Unread only
-      </label>
-
-      {(filters.keyword || filters.source_id || filters.category || filters.is_read !== undefined) && (
+      {(filters.keyword || filters.source_id || filters.category) && (
         <button
           onClick={() => onChange({})}
           style={{ fontSize: 12, color: 'var(--brand-color)', background: 'none', border: 'none', cursor: 'pointer' }}

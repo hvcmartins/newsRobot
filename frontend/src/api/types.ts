@@ -82,6 +82,7 @@ export interface EmailConfig {
   subject_template: string
   intro_text: string | null
   is_active: boolean
+  send_days: string | null  // JSON array e.g. '["mon","wed","fri"]'
   monthly_digest_enabled: boolean
   monthly_digest_day: number
   monthly_digest_time: string

@@ -8,6 +8,16 @@ import Input from '@/components/ui/Input'
 
 type Freq = 'immediate' | 'daily' | 'weekly'
 
+const SEND_DAYS = [
+  { key: 'mon', label: 'Mon' },
+  { key: 'tue', label: 'Tue' },
+  { key: 'wed', label: 'Wed' },
+  { key: 'thu', label: 'Thu' },
+  { key: 'fri', label: 'Fri' },
+  { key: 'sat', label: 'Sat' },
+  { key: 'sun', label: 'Sun' },
+]
+
 const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
 const DAY_LABEL: Record<string, string> = {
   monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu',
@@ -90,6 +100,7 @@ export default function EmailPage() {
     smtp_host: '', smtp_port: 587, smtp_user: '', smtp_password: '',
     from_email: '', from_name: 'News Robot',
     recipients_json: '[]', frequency: 'daily', send_time: '08:00',
+    send_days: '["mon","tue","wed","thu","fri"]',
     lookback_hours: 24, schedule_overrides: '{"monday":72}',
     subject_template: '{{tenant_name}} News Digest – {{date}}',
     intro_text: '', is_active: true,
@@ -225,20 +236,43 @@ export default function EmailPage() {
 
             {/* Regular Schedule */}
             <div style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 600 }}>Regular Digest Schedule</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Frequency</label>
-                  <select value={form.frequency ?? 'daily'} onChange={(e) => set({ frequency: e.target.value as Freq })}
-                    style={{ padding: '7px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }}>
-                    <option value="immediate">Immediate (high-relevance only)</option>
-                    <option value="daily">Daily Digest</option>
-                    <option value="weekly">Weekly Summary</option>
-                  </select>
+              <h2 style={{ fontSize: 15, fontWeight: 600 }}>Digest Schedule</h2>
+
+              {/* Day-of-week toggles */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Send on</label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {SEND_DAYS.map(({ key, label }) => {
+                    const days: string[] = (() => { try { return JSON.parse(form.send_days ?? '[]') } catch { return [] } })()
+                    const active = days.includes(key)
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => {
+                          const next = active ? days.filter(d => d !== key) : [...days, key]
+                          set({ send_days: next.length ? JSON.stringify(next) : null })
+                        }}
+                        style={{
+                          width: 44, height: 44, borderRadius: 8, fontSize: 12, fontWeight: 600,
+                          cursor: 'pointer', border: '1px solid',
+                          background: active ? 'var(--brand-color)' : '#fff',
+                          borderColor: active ? 'var(--brand-color)' : '#ddd',
+                          color: active ? '#fff' : '#888',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
                 </div>
-                <Input label="Send Time (UTC)" type="time" value={form.send_time ?? '08:00'} onChange={(e) => set({ send_time: e.target.value })} />
+                {(() => { try { return JSON.parse(form.send_days ?? '[]').length === 0 } catch { return true } })() && (
+                  <p style={{ fontSize: 11, color: '#f59e0b', margin: 0 }}>No days selected — scheduled digest is disabled.</p>
+                )}
               </div>
-              {form.frequency !== 'immediate' && <DigestWindowSection form={form} set={set} />}
+
+              <Input label="Send Time (UTC)" type="time" value={form.send_time ?? '08:00'} onChange={(e) => set({ send_time: e.target.value })} />
+              <DigestWindowSection form={form} set={set} />
               <Input label="Subject Template" value={form.subject_template ?? ''} onChange={(e) => set({ subject_template: e.target.value })}
                 placeholder="{{tenant_name}} News Digest – {{date}}" />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

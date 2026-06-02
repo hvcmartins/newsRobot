@@ -31,6 +31,7 @@ class EmailConfig(Base):
                                default="{{tenant_name}} News Digest – {{date}}")
     intro_text = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    send_days = Column(Text, nullable=True)  # JSON: ["mon","wed","fri"] — null = all days
     # Monthly digest
     monthly_digest_enabled = Column(Boolean, default=False, nullable=False)
     monthly_digest_day = Column(Integer, default=1)    # day of month (1-28)

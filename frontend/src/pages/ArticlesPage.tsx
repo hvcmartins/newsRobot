@@ -53,11 +53,6 @@ export default function ArticlesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['articles', tenantId] }),
   })
 
-  const markAllReadMut = useMutation({
-    mutationFn: () => articleApi.markAllRead(tenantId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['articles', tenantId] }),
-  })
-
   const scrapeMut = useMutation({
     mutationFn: () => scrapeRunApi.triggerFull(tenantId),
     onSuccess: () => {
@@ -139,9 +134,6 @@ export default function ArticlesPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button variant="secondary" size="sm" loading={markAllReadMut.isPending} onClick={() => markAllReadMut.mutate()}>
-            Mark all read
-          </Button>
           <Button size="sm" loading={scrapeMut.isPending} onClick={() => scrapeMut.mutate()}>
             🔄 Scrape now
           </Button>

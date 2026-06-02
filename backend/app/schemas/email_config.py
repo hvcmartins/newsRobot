@@ -20,6 +20,7 @@ class EmailConfigBase(BaseModel):
     subject_template: str = "{{tenant_name}} News Digest – {{date}}"
     intro_text: Optional[str] = None
     is_active: bool = True
+    send_days: Optional[str] = None  # JSON: ["mon","wed","fri"]
     monthly_digest_enabled: bool = False
     monthly_digest_day: int = 1
     monthly_digest_time: str = "08:00"
@@ -48,6 +49,7 @@ class EmailConfigUpdate(BaseModel):
     subject_template: Optional[str] = None
     intro_text: Optional[str] = None
     is_active: Optional[bool] = None
+    send_days: Optional[str] = None
     monthly_digest_enabled: Optional[bool] = None
     monthly_digest_day: Optional[int] = None
     monthly_digest_time: Optional[str] = None
