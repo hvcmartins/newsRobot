@@ -208,6 +208,8 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         ai = get_ai_provider()
 
         new_count = 0
+        age_skipped = 0
+        url_skipped = 0
         high_priority_new = []
         new_article_ids = []
         age_days = tenant.max_article_age_days or settings.max_article_age_days
@@ -221,15 +223,16 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
                 if (now - pub) > max_age:
                     logger.debug("Skipping old article (%s): '%s'",
                                  pub.date(), art.title[:70])
+                    age_skipped += 1
                     continue
             elif source.type == SourceType.scrape:
-                # Web-scraped article with no detectable date — skip to avoid
-                # importing stale archive pages that have no publication timestamp.
                 logger.debug("Skipping undated web article: '%s'", art.title[:70])
+                age_skipped += 1
                 continue
 
             # Persistent deduplication via scraped_urls (survives archiving/deletion)
             if _is_url_seen(db, source.tenant_id, art.url):
+                url_skipped += 1
                 continue
 
             dup_id = _is_near_duplicate(art, recent, ai)
@@ -260,8 +263,12 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
                 high_priority_new.append(db_article)
 
         db.commit()
-        logger.info("Done '%s': %d new, %d already seen",
-                    source.name, new_count, len(articles) - new_count)
+        parts = [f"{new_count} new"]
+        if url_skipped:
+            parts.append(f"{url_skipped} duplicate URL")
+        if age_skipped:
+            parts.append(f"{age_skipped} too old (>{age_days}d)")
+        logger.info("Done '%s': %s", source.name, ", ".join(parts))
 
         accepted_langs = json.loads(tenant.accepted_languages or "[]") or None
         tenant_categories = json.loads(tenant.ai_categories or "[]") or None
