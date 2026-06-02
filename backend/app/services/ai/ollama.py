@@ -7,7 +7,8 @@ from .base import (AIProvider, RelevanceResult, EnrichmentResult,
                    ENRICH_USER_TPL, ENRICH_NO_PROFILE_TPL,
                    DISCOVER_SYSTEM, DISCOVER_USER_TPL,
                    SUGGEST_CATEGORIES_PROMPT,
-                   normalise_discovered, repair_json_array, extract_sources_from_text)
+                   normalise_discovered, repair_json_array, extract_sources_from_text,
+                   strip_thinking)
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class OllamaProvider(AIProvider):
         usage = data.get("usage", {})
         if usage.get("completion_tokens"):
             self._record_tokens(usage["completion_tokens"], time.monotonic() - t0)
-        return data["choices"][0]["message"]["content"].strip()
+        return strip_thinking(data["choices"][0]["message"]["content"].strip())
 
     def _ask_array(self, prompt: str, system: str | None = None) -> list:
         raw = self._ask(prompt, max_tokens=2048, system=system)

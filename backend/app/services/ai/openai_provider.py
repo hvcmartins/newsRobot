@@ -6,7 +6,8 @@ from .base import (AIProvider, RelevanceResult, EnrichmentResult,
                    ENRICH_USER_TPL, ENRICH_NO_PROFILE_TPL,
                    DISCOVER_SYSTEM, DISCOVER_USER_TPL,
                    SUGGEST_CATEGORIES_PROMPT,
-                   normalise_discovered, repair_json_array, extract_sources_from_text)
+                   normalise_discovered, repair_json_array, extract_sources_from_text,
+                   strip_thinking)
 from .stats import record_tokens
 
 logger = logging.getLogger(__name__)
@@ -18,10 +19,12 @@ _CATEGORIES = [
 
 
 class OpenAIProvider(AIProvider):
-    def __init__(self, api_key: str, model: str, base_url: str | None = None):
+    def __init__(self, api_key: str, model: str, base_url: str | None = None,
+                 extra_body: dict | None = None):
         from openai import OpenAI
         self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model
+        self._extra_body = extra_body or {}
 
     def _ask(self, prompt: str, max_tokens: int = 512,
              system: str | None = None) -> str:
@@ -34,10 +37,12 @@ class OpenAIProvider(AIProvider):
             model=self._model,
             max_tokens=max_tokens,
             messages=messages,
+            **({"extra_body": self._extra_body} if self._extra_body else {}),
         )
         if resp.usage:
             record_tokens(resp.usage.completion_tokens, time.monotonic() - t0)
-        return resp.choices[0].message.content.strip()
+        # Strip <think>…</think> reasoning blocks (Qwen3, DeepSeek-R1, etc.)
+        return strip_thinking(resp.choices[0].message.content.strip())
 
     def _ask_array(self, prompt: str, system: str | None = None) -> list:
         raw = self._ask(prompt, max_tokens=2048, system=system)

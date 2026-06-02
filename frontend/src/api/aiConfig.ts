@@ -8,6 +8,7 @@ export interface AIConfigRead {
   base_url: string | null
   local_model_id: string | null
   cpu_limit_percent?: number
+  n_gpu_layers?: number
   serper_api_key_set: boolean
   google_search_api_key_set: boolean
   google_search_cx: string | null
@@ -21,6 +22,7 @@ export interface AIConfigUpdate {
   base_url?: string | null
   local_model_id?: string | null
   cpu_limit_percent?: number
+  n_gpu_layers?: number
   serper_api_key?: string | null
   google_search_api_key?: string | null
   google_search_cx?: string | null

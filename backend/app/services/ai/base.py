@@ -3,6 +3,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 
+
+def strip_thinking(text: str) -> str:
+    """Remove <think>…</think> reasoning blocks emitted by models like Qwen3 / DeepSeek-R1.
+
+    Applied in every provider's _ask() so JSON parsing never sees thinking tokens,
+    regardless of whether the server-side thinking suppression is available.
+    """
+    return re.sub(r'<think>.*?</think>\s*', '', text, flags=re.DOTALL).strip()
+
 # ── Relevance scoring prompts ─────────────────────────────────────────────────
 # Split into system (stable: profile + rubric) and user (variable: article).
 # The system part is sent as a cacheable system message in capable providers,

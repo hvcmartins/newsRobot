@@ -14,6 +14,7 @@ class AIConfig(Base):
     base_url = Column(String(500), nullable=True)        # ollama custom URL
     local_model_id = Column(String(100), nullable=True)  # llamacpp selected model
     cpu_limit_percent = Column(Integer, default=80, nullable=False)  # llamacpp thread cap
+    n_gpu_layers = Column(Integer, default=-1, nullable=False)       # llamacpp GPU layers (-1 = all)
     serper_api_key = Column(String(500), nullable=True)              # Serper.dev (Google Search)
     google_search_api_key = Column(String(500), nullable=True)       # Google Custom Search (legacy)
     google_search_cx = Column(String(200), nullable=True)            # Custom Search Engine ID (legacy)

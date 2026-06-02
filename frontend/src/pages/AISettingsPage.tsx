@@ -145,6 +145,7 @@ export default function AISettingsPage() {
   const [baseUrl, setBaseUrl] = useState('')
   const [localModelId, setLocalModelId] = useState('')
   const [cpuLimit, setCpuLimit] = useState(80)
+  const [nGpuLayers, setNGpuLayers] = useState(-1)
   const [serperKey, setSerperKey] = useState('')
   const [googleKey, setGoogleKey] = useState('')
   const [googleCx, setGoogleCx] = useState('')
@@ -160,6 +161,7 @@ export default function AISettingsPage() {
     setBaseUrl(current.base_url ?? '')
     setLocalModelId(current.local_model_id ?? '')
     setCpuLimit(current.cpu_limit_percent ?? 80)
+    setNGpuLayers(current.n_gpu_layers ?? -1)
     setGoogleCx(current.google_search_cx ?? '')
     setApiKey('')
     setSerperKey('')
@@ -187,6 +189,7 @@ export default function AISettingsPage() {
         base_url: baseUrl || null,
         local_model_id: provider === 'llamacpp' ? (localModelId || null) : null,
         cpu_limit_percent: provider === 'llamacpp' ? cpuLimit : undefined,
+        n_gpu_layers: provider === 'llamacpp' ? nGpuLayers : undefined,
         google_search_cx: googleCx.trim() || null,
       }
       if (apiKey.trim()) payload.api_key = apiKey.trim()
@@ -375,6 +378,28 @@ export default function AISettingsPage() {
                 <span>25% (slower, keeps system responsive)</span>
                 <span>100% (fastest)</span>
               </div>
+            </div>
+          )}
+
+          {provider === 'llamacpp' && (
+            <div style={{ marginTop: 16 }}>
+              <label style={labelStyle}>GPU Layers</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  type="number" min={-1}
+                  value={nGpuLayers}
+                  onChange={e => setNGpuLayers(parseInt(e.target.value) || -1)}
+                  style={{ width: 80, padding: '7px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }}
+                />
+                <span style={{ fontSize: 12, color: '#888' }}>
+                  {nGpuLayers === -1 ? 'All layers offloaded to GPU (recommended if GPU available)' :
+                   nGpuLayers === 0 ? 'CPU only — no GPU offloading' :
+                   `${nGpuLayers} layers on GPU, rest on CPU`}
+                </span>
+              </div>
+              <p style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+                -1 = offload all layers. 0 = CPU only. Requires ROCm (AMD) or CUDA (NVIDIA) build.
+              </p>
             </div>
           )}
 

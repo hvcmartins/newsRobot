@@ -10,6 +10,7 @@ class AIConfigUpdate(BaseModel):
     base_url: Optional[str] = None
     local_model_id: Optional[str] = None
     cpu_limit_percent: int = 80          # llamacpp: % of CPU cores to use (25-100)
+    n_gpu_layers: int = -1               # llamacpp: GPU layers to offload (-1 = all, 0 = CPU only)
     serper_api_key: Optional[str] = None
     google_search_api_key: Optional[str] = None   # legacy
     google_search_cx: Optional[str] = None        # legacy
@@ -23,6 +24,7 @@ class AIConfigRead(BaseModel):
     base_url: Optional[str]
     local_model_id: Optional[str]
     cpu_limit_percent: int = 80
+    n_gpu_layers: int = -1
     serper_api_key_set: bool = False
     google_search_api_key_set: bool = False
     google_search_cx: Optional[str] = None

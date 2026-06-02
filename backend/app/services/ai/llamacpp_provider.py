@@ -4,7 +4,8 @@ import time
 import threading
 from .base import (AIProvider, RelevanceResult,
                    DISCOVER_PROMPT_SHORT, SUGGEST_CATEGORIES_PROMPT,
-                   normalise_discovered, repair_json_array, extract_sources_from_text)
+                   normalise_discovered, repair_json_array, extract_sources_from_text,
+                   strip_thinking)
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +16,11 @@ _CATEGORIES = [
 
 
 class LlamaCppProvider(AIProvider):
-    def __init__(self, model_path: str, cpu_limit_percent: int = 80):
+    def __init__(self, model_path: str, cpu_limit_percent: int = 80,
+                 n_gpu_layers: int = -1):
         self._model_path = model_path
         self._cpu_limit_percent = max(25, min(100, cpu_limit_percent))
+        self._n_gpu_layers = n_gpu_layers
         self._llm = None
         self._load_lock = threading.Lock()   # prevents concurrent model loads (OOM)
         self._infer_lock = threading.Lock()  # llama_cpp is not thread-safe for inference
@@ -32,13 +35,15 @@ class LlamaCppProvider(AIProvider):
                     total = os.cpu_count() or 4
                     n_threads = max(1, round(total * self._cpu_limit_percent / 100))
                     logger.info(
-                        "Loading llama.cpp model from %s (threads=%d/%d, cpu_limit=%d%%)",
-                        self._model_path, n_threads, total, self._cpu_limit_percent,
+                        "Loading llama.cpp model from %s (threads=%d/%d, cpu=%d%%, gpu_layers=%d)",
+                        self._model_path, n_threads, total,
+                        self._cpu_limit_percent, self._n_gpu_layers,
                     )
                     self._llm = Llama(
                         model_path=self._model_path,
-                        n_ctx=4096,
+                        n_ctx=8192,
                         n_threads=n_threads,
+                        n_gpu_layers=self._n_gpu_layers,
                         verbose=False,
                     )
         return self._llm
@@ -59,7 +64,8 @@ class LlamaCppProvider(AIProvider):
         usage = resp.get("usage", {})
         if usage.get("completion_tokens"):
             record_tokens(usage["completion_tokens"], time.monotonic() - t0)
-        return resp["choices"][0]["message"]["content"].strip()
+        # Strip <think>…</think> blocks (Qwen3, DeepSeek-R1, etc.)
+        return strip_thinking(resp["choices"][0]["message"]["content"].strip())
 
     def _ask_json(self, prompt: str) -> dict:
         raw = self._ask(prompt)
@@ -83,6 +89,8 @@ class LlamaCppProvider(AIProvider):
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
         profile_short = (topic_profile or "")[:250]
         excerpt_short = (excerpt or "")[:150]
+        # /no_think suppresses Qwen3 reasoning mode — without it the thinking
+        # block consumes all of max_tokens=8 before the answer letter is generated.
         prompt = (
             f"Company profile: {profile_short}\n\n"
             f"News article:\nTitle: {title[:150]}\n{excerpt_short}\n\n"
@@ -91,9 +99,9 @@ class LlamaCppProvider(AIProvider):
             "B - Useful: relevant market, regulatory, or technology news\n"
             "C - Marginal: only loosely related\n"
             "D - Irrelevant: unrelated topic\n\n"
-            "Reply with exactly one letter (A, B, C, or D):"
+            "Reply with exactly one letter (A, B, C, or D): /no_think"
         )
-        raw = self._ask(prompt, max_tokens=8).strip()
+        raw = self._ask(prompt, max_tokens=16).strip()
         logger.debug("llama.cpp relevance raw: %r", raw[:30])
 
         # Match the first A/B/C/D in the response
