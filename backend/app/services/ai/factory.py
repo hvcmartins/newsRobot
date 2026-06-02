@@ -63,6 +63,16 @@ def _build_provider(db=None) -> AIProvider:
         logger.info("AI: %s (model=%s, base_url=%s)", name, model, base_url)
         return OpenAIProvider(api_key=key, model=model, base_url=base_url)
 
+    if name == "llamaserver":
+        base_url = config.base_url
+        if not base_url:
+            logger.warning("llamaserver selected but no base_url — NullProvider")
+            return NullProvider()
+        from .openai_provider import OpenAIProvider
+        logger.info("AI: LLM Server (url=%s, model=%s)", base_url, model)
+        # Local servers don't need a real key — use a dummy value
+        return OpenAIProvider(api_key=key or "local", model=model, base_url=base_url)
+
     if name == "llamacpp":
         try:
             import llama_cpp  # noqa: F401

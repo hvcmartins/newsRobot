@@ -95,6 +95,18 @@ const PROVIDERS: ProviderDef[] = [
     defaultModel: 'llama3.2',
   },
   {
+    value: 'llamaserver',
+    label: 'LLM Server (local)',
+    description: 'llama.cpp server, LM Studio, vLLM — any OpenAI-compatible local server',
+    requiresKey: false,
+    requiresUrl: true,
+    keyLabel: '',
+    keyPlaceholder: '',
+    keyDocsUrl: '',
+    models: [],
+    defaultModel: '',
+  },
+  {
     value: 'llamacpp',
     label: 'Local AI (built-in)',
     description: 'Download & run models directly in this container — CPU only, no server needed',
@@ -313,13 +325,17 @@ export default function AISettingsPage() {
           {def.requiresUrl && (
             <div style={{ marginBottom: 16 }}>
               <Input
-                label="Ollama Base URL"
+                label={provider === 'llamaserver' ? 'Server Base URL (include /v1)' : 'Ollama Base URL'}
                 value={baseUrl}
                 onChange={e => setBaseUrl(e.target.value)}
-                placeholder="http://192.168.1.100:11434"
+                placeholder={provider === 'llamaserver'
+                  ? 'http://192.168.2.166:8081/v1'
+                  : 'http://192.168.1.100:11434'}
               />
               <p style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-                Use your Unraid server IP if Ollama runs as a container on the same machine.
+                {provider === 'llamaserver'
+                  ? 'Include /v1 at the end. Works with llama.cpp server, LM Studio, vLLM, Jan, and any OpenAI-compatible server.'
+                  : 'Use your Unraid server IP if Ollama runs as a container on the same machine.'}
               </p>
             </div>
           )}
