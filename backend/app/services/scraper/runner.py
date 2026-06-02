@@ -71,7 +71,6 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
             # are picked up again once the user sets up an AI provider.
             return
         title_short = article.title[:70]
-        ai_log.info("Enriching: '%s'", title_short)
 
         # Step 1: Relevance check — run first so irrelevant articles are
         # discarded before spending tokens on summary or category.
@@ -96,6 +95,7 @@ def _enrich_article(article_id: int, topic_profile: str | None) -> None:
                 ai_log.warning("Relevance scoring failed for '%s': %s", title_short, exc)
 
         # Step 2: Summary (only reached for relevant articles)
+        ai_log.info("Summarising: '%s'", title_short)
         try:
             article.summary = ai.summarize(article.title, article.excerpt or "")
             ai_log.info("Summary done: '%s'", title_short)
