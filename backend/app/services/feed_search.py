@@ -100,7 +100,7 @@ def _ai_search_queries(profile: str) -> list[str] | None:
             "EU Parliament, Council, Commission, Belgium foreign policy: "
             "use 'European Union institutional' or 'Belgium EU foreign policy', "
             "NOT 'EU ASEAN policy' (that is just one bullet point).\n\n"
-            f"Profile:\n{profile[:1400]}\n\n"
+            f"Profile:\n{profile}\n\n"
             'Return JSON only: {"queries": ["Timor-Leste politics", "ASEAN regional affairs", "European Union institutional", "OACPS ACP", "CPLP lusophone", "SIDS climate finance", "UNESCO", "Brussels diplomacy"]}'
         )
         if hasattr(ai, '_ask_json'):

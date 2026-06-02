@@ -1,6 +1,6 @@
 import json
 import logging
-from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, normalise_discovered
+from .base import AIProvider, RelevanceResult, DISCOVER_PROMPT, RELEVANCE_PROMPT_RICH, normalise_discovered
 
 logger = logging.getLogger(__name__)
 
@@ -45,19 +45,15 @@ class ClaudeProvider(AIProvider):
             raise ValueError(f"Invalid JSON from AI: {raw}") from exc
 
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
-        prompt = (
-            f"Company profile: {topic_profile}\n\n"
-            f"Article title: {title}\n"
-            f"Article excerpt: {excerpt or '(none)'}\n\n"
-            "Rate how relevant this article is to the company (0.0 = completely irrelevant, "
-            "1.0 = highly relevant). Be strict — score above 0.5 only if the article is "
-            "clearly useful to this company.\n"
-            'Return JSON only, e.g.: {"score": 0.85, "reason": "Covers EU energy policy directly affecting the company\'s market"}'
+        prompt = RELEVANCE_PROMPT_RICH.format(
+            topic_profile=topic_profile,
+            title=title,
+            excerpt=(excerpt or "(none)")[:1500],
         )
         data = self._ask_json(prompt)
         return RelevanceResult(
-            score=float(data.get("score", 0.5)),
-            reason=str(data.get("reason", "")),
+            score=max(0.0, min(1.0, float(data.get("score", 0.5)))),
+            reason=str(data.get("reason", data.get("thinking", ""))),
         )
 
     def summarize(self, title, excerpt) -> str:

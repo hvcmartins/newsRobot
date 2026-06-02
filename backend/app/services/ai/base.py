@@ -3,15 +3,58 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 
+# Rich relevance prompt for capable models (Claude, GPT-4, large Ollama).
+# Forces chain-of-thought reasoning before scoring and anchors the scale.
+RELEVANCE_PROMPT_RICH = """\
+You are a relevance classifier for a corporate news monitoring system.
+
+## Company Profile
+{topic_profile}
+
+## Article
+Title: {title}
+Excerpt: {excerpt}
+
+## Task
+Decide how relevant this article is to the company described above.
+
+Step 1 – Identify connections: which specific topics, regions, organisations, \
+or industries from the profile does this article touch? If nothing matches, \
+write "none".
+
+Step 2 – Score using this calibrated scale:
+  0.9–1.0  Core business — directly about their industry, key markets, \
+regulators, major clients, or named organisations in the profile
+  0.7–0.8  Useful intelligence — relevant market trends, competitor moves, \
+policy changes, or technology shifts in their space
+  0.4–0.6  Background context — loosely related sector or region; \
+worth knowing but not actionable
+  0.1–0.3  Marginal — only a passing reference to something in the profile
+  0.0      No connection at all
+
+Be strict: most articles should score below 0.5 unless they clearly match \
+something specific in the profile.
+
+Return JSON only — no markdown, no extra text:
+{{"thinking": "<one sentence: what the article is about + which profile area it touches>", \
+"score": 0.0, "reason": "<one sentence justification for the score>"}}"""
+
+
 # Shared prompt used by every provider for source discovery.
 DISCOVER_PROMPT = """\
 You are a news research expert. Based on the company profile below, suggest \
-10-12 reliable news sources the company should monitor.
+12-15 reliable news sources the company should monitor.
 
-Prefer sources that publish RSS or Atom feeds — use the actual feed URL, not \
-the homepage. For well-known publications you can produce correct feed URLs \
-from memory (e.g. https://techcrunch.com/feed/, \
-https://feeds.reuters.com/reuters/businessNews).
+Important rules:
+- Cover EVERY major topic section in the profile — not just the most prominent one.
+- Only suggest sources that genuinely publish on the stated topic.
+- Prefer RSS/Atom feed URLs over homepages. Use real, working feed URLs from \
+memory (e.g. https://techcrunch.com/feed/, \
+https://feeds.reuters.com/reuters/businessNews, \
+https://feeds.bbci.co.uk/news/world/rss.xml).
+- Do NOT invent URLs — if unsure of the exact feed path, use the homepage URL \
+and set type to "scrape".
+- Aim for diversity: different publishers, different countries, different formats.
 
 Company profile:
 {topic_profile}
@@ -24,7 +67,7 @@ Each element must have exactly these keys:
   category    (string)  – one of: Technology, Finance, Business, Politics, \
 Science, Health, Sports, World News, Environment, Other
   description (string)  – one sentence about what the source covers
-  reason      (string)  – one sentence on why it matches the profile
+  reason      (string)  – one sentence on why it matches this specific profile
 
 Example element:
 {{"name":"Reuters Business","url":"https://feeds.reuters.com/reuters/businessNews",\
