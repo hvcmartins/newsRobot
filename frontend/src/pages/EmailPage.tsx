@@ -91,7 +91,7 @@ export default function EmailPage() {
 
   const pingMut = useMutation({
     mutationFn: () => emailApi.pingSmtp(tenantId),
-    onSuccess: (data) => setTestMsg(`✓ Connected to ${data.host}:${data.port} — authentication successful`),
+    onSuccess: (data) => setTestMsg(`✓ Connected to ${data.host}:${data.port} — ${data.status}`),
     onError: (e: Error) => setTestMsg(`Error: ${e.message}`),
   })
 

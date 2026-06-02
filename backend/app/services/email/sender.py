@@ -57,12 +57,13 @@ def send_email_raw(config, subject: str, html: str, text: str,
             server.sendmail(config.from_email, recipients, msg.as_string())
 
 
-def ping_smtp(config) -> None:
+def ping_smtp(config) -> str:
     """Open a connection, authenticate, then quit — no email sent.
-    Raises on any failure so the caller can return the error message."""
+    Returns a status string. Raises on any failure."""
+    has_auth = bool(config.smtp_user and config.smtp_password)
     if config.smtp_port == 465:
         with smtplib.SMTP_SSL(config.smtp_host, config.smtp_port, timeout=10) as server:
-            if config.smtp_user and config.smtp_password:
+            if has_auth:
                 server.login(config.smtp_user, config.smtp_password)
     else:
         with smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=10) as server:
@@ -70,8 +71,9 @@ def ping_smtp(config) -> None:
             if config.smtp_port == 587:
                 server.starttls()
                 server.ehlo()
-            if config.smtp_user and config.smtp_password:
+            if has_auth:
                 server.login(config.smtp_user, config.smtp_password)
+    return "authenticated" if has_auth else "connected (no credentials configured)"
 
 
 def _archive_articles(articles: list, digest_id: int, db: Session) -> None:

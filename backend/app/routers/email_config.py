@@ -39,6 +39,8 @@ def update_config(tenant_id: int, data: EmailConfigUpdate,
                   db: Session = Depends(get_db)):
     cfg = _get_or_404(tenant_id, db)
     for field, value in data.model_dump(exclude_none=True).items():
+        if field == 'smtp_password' and value == '':
+            continue  # empty string = keep existing password (UI never receives the real value)
         setattr(cfg, field, value)
     db.commit()
     db.refresh(cfg)
@@ -82,8 +84,8 @@ def ping_smtp(tenant_id: int, db: Session = Depends(get_db)):
     cfg = _get_or_404(tenant_id, db)
     from app.services.email.sender import ping_smtp as _ping
     try:
-        _ping(cfg)
-        return {"ok": True, "host": cfg.smtp_host, "port": cfg.smtp_port}
+        status = _ping(cfg)
+        return {"ok": True, "host": cfg.smtp_host, "port": cfg.smtp_port, "status": status}
     except Exception as exc:
         raise HTTPException(500, str(exc))
 
