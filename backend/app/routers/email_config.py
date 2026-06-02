@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -7,6 +8,7 @@ from app.models import EmailConfig
 from app.schemas.email_config import EmailConfigCreate, EmailConfigRead, EmailConfigUpdate
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _get_or_404(tenant_id: int, db: Session) -> EmailConfig:
@@ -49,6 +51,24 @@ def update_config(tenant_id: int, data: EmailConfigUpdate,
     return cfg
 
 
+@router.get("/{tenant_id}/diagnose")
+def diagnose(tenant_id: int, db: Session = Depends(get_db)):
+    """Return SMTP config details (no password) to help debug send failures."""
+    cfg = _get_or_404(tenant_id, db)
+    import json
+    return {
+        "smtp_host": cfg.smtp_host,
+        "smtp_port": cfg.smtp_port,
+        "smtp_user": cfg.smtp_user,
+        "smtp_password_set": bool(cfg.smtp_password),
+        "from_email": cfg.from_email,
+        "from_name": cfg.from_name,
+        "recipients": json.loads(cfg.recipients_json or "[]"),
+        "is_active": cfg.is_active,
+        "test_will_send_to": cfg.from_email,
+    }
+
+
 @router.post("/{tenant_id}/test")
 def test_send(tenant_id: int, db: Session = Depends(get_db)):
     cfg = _get_or_404(tenant_id, db)
@@ -60,7 +80,6 @@ def test_send(tenant_id: int, db: Session = Depends(get_db)):
         html, text = render_email(context)
         subject = f"[TEST] {context['subject']}"
     else:
-        # No articles yet — send a plain connectivity test
         subject = "[TEST] NewsRobot email configuration"
         html = (
             "<div style='font-family:sans-serif;padding:32px;max-width:600px'>"
@@ -71,10 +90,16 @@ def test_send(tenant_id: int, db: Session = Depends(get_db)):
         )
         text = "Email configuration is working. Your SMTP settings are correct."
 
+    logger.info("Test email: host=%s port=%s user=%s has_password=%s from=%s to=%s",
+                cfg.smtp_host, cfg.smtp_port, cfg.smtp_user,
+                bool(cfg.smtp_password), cfg.from_email, cfg.from_email)
     try:
         send_email_raw(cfg, subject, html, text, [cfg.from_email])
-        return {"sent_to": cfg.from_email}
+        logger.info("Test email sent successfully to %s", cfg.from_email)
+        return {"sent_to": cfg.from_email, "subject": subject,
+                "smtp_host": cfg.smtp_host, "smtp_port": cfg.smtp_port}
     except Exception as exc:
+        logger.error("Test email failed: %s", exc, exc_info=True)
         raise HTTPException(500, f"Send failed: {exc}")
 
 

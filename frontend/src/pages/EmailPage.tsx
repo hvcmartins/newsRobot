@@ -97,7 +97,7 @@ export default function EmailPage() {
 
   const testMut = useMutation({
     mutationFn: () => emailApi.testSend(tenantId),
-    onSuccess: (data) => setTestMsg(`Test email sent to ${data.sent_to}`),
+    onSuccess: (data) => setTestMsg(`✓ Test email sent → ${data.sent_to} via ${data.smtp_host}:${data.smtp_port} · Subject: "${data.subject}"`),
     onError: (e: Error) => setTestMsg(`Error: ${e.message}`),
   })
 
