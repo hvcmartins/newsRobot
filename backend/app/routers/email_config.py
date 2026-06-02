@@ -76,6 +76,18 @@ def test_send(tenant_id: int, db: Session = Depends(get_db)):
         raise HTTPException(500, f"Send failed: {exc}")
 
 
+@router.post("/{tenant_id}/ping")
+def ping_smtp(tenant_id: int, db: Session = Depends(get_db)):
+    """Test SMTP connectivity and authentication without sending any email."""
+    cfg = _get_or_404(tenant_id, db)
+    from app.services.email.sender import ping_smtp as _ping
+    try:
+        _ping(cfg)
+        return {"ok": True, "host": cfg.smtp_host, "port": cfg.smtp_port}
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
 @router.post("/{tenant_id}/send-now")
 def send_now(tenant_id: int, db: Session = Depends(get_db)):
     """Manually trigger a digest send for all pending articles, regardless of schedule."""

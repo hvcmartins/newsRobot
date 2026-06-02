@@ -57,6 +57,23 @@ def send_email_raw(config, subject: str, html: str, text: str,
             server.sendmail(config.from_email, recipients, msg.as_string())
 
 
+def ping_smtp(config) -> None:
+    """Open a connection, authenticate, then quit — no email sent.
+    Raises on any failure so the caller can return the error message."""
+    if config.smtp_port == 465:
+        with smtplib.SMTP_SSL(config.smtp_host, config.smtp_port, timeout=10) as server:
+            if config.smtp_user and config.smtp_password:
+                server.login(config.smtp_user, config.smtp_password)
+    else:
+        with smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=10) as server:
+            server.ehlo()
+            if config.smtp_port == 587:
+                server.starttls()
+                server.ehlo()
+            if config.smtp_user and config.smtp_password:
+                server.login(config.smtp_user, config.smtp_password)
+
+
 def _archive_articles(articles: list, digest_id: int, db: Session) -> None:
     """Move sent articles from pending queue to archive."""
     now = datetime.datetime.utcnow()

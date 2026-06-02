@@ -89,6 +89,12 @@ export default function EmailPage() {
     }
   }
 
+  const pingMut = useMutation({
+    mutationFn: () => emailApi.pingSmtp(tenantId),
+    onSuccess: (data) => setTestMsg(`✓ Connected to ${data.host}:${data.port} — authentication successful`),
+    onError: (e: Error) => setTestMsg(`Error: ${e.message}`),
+  })
+
   const testMut = useMutation({
     mutationFn: () => emailApi.testSend(tenantId),
     onSuccess: (data) => setTestMsg(`Test email sent to ${data.sent_to}`),
@@ -324,9 +330,12 @@ export default function EmailPage() {
 
               {saveError && <p style={{ fontSize: 12, color: '#e53935', margin: 0 }}>{saveError}</p>}
 
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <Button variant="secondary" loading={pingMut.isPending} onClick={() => pingMut.mutate()} disabled={!existing}>
+                  🔌 Test Connection
+                </Button>
                 <Button variant="secondary" loading={testMut.isPending} onClick={() => testMut.mutate()} disabled={!existing}>
-                  Send Test Email
+                  ✉ Send Test Email
                 </Button>
                 <Button loading={saving} onClick={handleSave}>Save</Button>
               </div>
