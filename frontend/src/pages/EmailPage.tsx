@@ -181,6 +181,32 @@ export default function EmailPage() {
               </div>
             </div>
 
+            {/* Articles per Category — placed high so it's always visible */}
+            <div style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Articles per Category</h2>
+                <p style={{ fontSize: 12, color: '#888', margin: '4px 0 0' }}>Max articles included per topic in each digest. All pending articles are archived after sending.</p>
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {[null, 3, 5, 10, 15, 20].map((n) => {
+                  const active = (form.max_articles_per_digest ?? null) === n
+                  return (
+                    <button key={String(n)} onClick={() => set({ max_articles_per_digest: n })}
+                      style={{
+                        padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                        cursor: 'pointer', border: '1px solid',
+                        background: active ? 'var(--brand-color)' : '#fff',
+                        borderColor: active ? 'var(--brand-color)' : '#ddd',
+                        color: active ? '#fff' : '#666',
+                        transition: 'all 0.15s',
+                      }}>
+                      {n === null ? 'All' : `Top ${n}`}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             {/* Regular Schedule */}
             <div style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <h2 style={{ fontSize: 15, fontWeight: 600 }}>Digest Schedule</h2>
@@ -227,35 +253,6 @@ export default function EmailPage() {
                   rows={2} placeholder="Intro paragraph shown at the top of the email…"
                   style={{ padding: '7px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13, resize: 'vertical', fontFamily: 'inherit' }} />
               </div>
-            </div>
-
-            {/* Articles per category */}
-            <div style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Articles per Category</h2>
-                <p style={{ fontSize: 12, color: '#888', margin: '4px 0 0' }}>How many articles to include per topic category in each digest.</p>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {[null, 3, 5, 10, 15, 20].map((n) => {
-                  const active = (form.max_articles_per_digest ?? null) === n
-                  return (
-                    <button key={String(n)} onClick={() => set({ max_articles_per_digest: n })}
-                      style={{
-                        padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                        cursor: 'pointer', border: '1px solid',
-                        background: active ? 'var(--brand-color)' : '#fff',
-                        borderColor: active ? 'var(--brand-color)' : '#ddd',
-                        color: active ? '#fff' : '#666',
-                        transition: 'all 0.15s',
-                      }}>
-                      {n === null ? 'All' : `Top ${n}`}
-                    </button>
-                  )
-                })}
-              </div>
-              <p style={{ fontSize: 11, color: '#aaa', margin: 0 }}>
-                Articles ranked by relevance score. All pending articles are archived after each send regardless of this limit.
-              </p>
             </div>
 
             {/* Monthly Digest */}
