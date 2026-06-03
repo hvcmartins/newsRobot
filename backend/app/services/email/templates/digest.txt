@@ -1,15 +1,23 @@
 {{ tenant_name }} News Digest — {{ date }}
 {% for i in range(tenant_name|length + 22) %}={% endfor %}
-
-{% if intro_text %}{{ intro_text }}
+{% if total_pending and total_pending > articles|length %}
+[Showing top {{ articles|length }} of {{ total_pending }} articles]
+{% endif %}
+{% if intro_text %}
+{{ intro_text }}
 
 {% endif %}
 {% for article in articles %}
-{{ loop.index }}. {{ article.title }}
-   {{ article.url }}
-   {% set display_text = article.summary or article.excerpt %}{% if display_text %}{{ display_text[:200] }}{% endif %}
-   Source: {{ article.source.name }}{% if article.published_at %} | {{ article.published_at.strftime("%b %d, %Y") }}{% endif %}{% if article.category and article.category != 'Uncategorized' %} | {{ article.category }}{% endif %}
+{% if has_categories and loop.first or (loop.previtem is defined and loop.previtem.category != article.category) %}
+── {{ article.category or 'General' }} ──────────────────────────────────────
+{% endif %}
+{{ loop.index }}. {{ article.translated_title or article.title }}
+{% if article.translated_title and article.translated_title != article.title %}   [{{ article.title }}]
+{% endif %}   {{ article.url }}
+   {% set display_text = article.summary or article.excerpt %}{% if display_text %}{{ display_text[:240] }}{% if display_text|length > 240 %}…{% endif %}{% endif %}
+
+   {{ article.source.name }}{% if article.published_at %} · {{ article.published_at.strftime("%b %d, %Y") }}{% endif %}{% if article.category and article.category not in ('Uncategorized', 'Other') %} · {{ article.category }}{% endif %}
 
 {% endfor %}
----
-You are receiving this because you subscribed to {{ tenant_name }} news alerts.
+───────────────────────────────────────────────────
+Sent by {{ from_name }} via NewsRobot

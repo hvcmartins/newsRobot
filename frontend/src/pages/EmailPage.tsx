@@ -41,6 +41,7 @@ export default function EmailPage() {
     send_days: '["mon","tue","wed","thu","fri"]',
     subject_template: '{{tenant_name}} News Digest – {{date}}',
     intro_text: '', is_active: true,
+    max_articles_per_digest: null,
     monthly_digest_enabled: false, monthly_digest_day: 1, monthly_digest_time: '08:00',
     yearly_digest_enabled: false, yearly_digest_month: 1, yearly_digest_day: 1, yearly_digest_time: '08:00',
   })
@@ -225,6 +226,31 @@ export default function EmailPage() {
                 <textarea value={form.intro_text ?? ''} onChange={(e) => set({ intro_text: e.target.value })}
                   rows={2} placeholder="Intro paragraph shown at the top of the email…"
                   style={{ padding: '7px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13, resize: 'vertical', fontFamily: 'inherit' }} />
+              </div>
+
+              {/* Max articles */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Articles per digest</label>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {[null, 5, 10, 15, 20, 30, 50].map((n) => {
+                    const active = (form.max_articles_per_digest ?? null) === n
+                    return (
+                      <button key={String(n)} onClick={() => set({ max_articles_per_digest: n })}
+                        style={{
+                          padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                          cursor: 'pointer', border: '1px solid',
+                          background: active ? 'var(--brand-color)' : '#fff',
+                          borderColor: active ? 'var(--brand-color)' : '#ddd',
+                          color: active ? '#fff' : '#666',
+                        }}>
+                        {n === null ? 'All' : `Top ${n}`}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p style={{ fontSize: 11, color: '#aaa', margin: 0 }}>
+                  Articles are ranked by relevance. All pending articles are archived after each send regardless of this limit.
+                </p>
               </div>
             </div>
 

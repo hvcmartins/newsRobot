@@ -21,6 +21,7 @@ class EmailConfigBase(BaseModel):
     intro_text: Optional[str] = None
     is_active: bool = True
     send_days: Optional[str] = None  # JSON: ["mon","wed","fri"]
+    max_articles_per_digest: Optional[int] = None  # null = all pending
     monthly_digest_enabled: bool = False
     monthly_digest_day: int = 1
     monthly_digest_time: str = "08:00"
@@ -50,6 +51,7 @@ class EmailConfigUpdate(BaseModel):
     intro_text: Optional[str] = None
     is_active: Optional[bool] = None
     send_days: Optional[str] = None
+    max_articles_per_digest: Optional[int] = None
     monthly_digest_enabled: Optional[bool] = None
     monthly_digest_day: Optional[int] = None
     monthly_digest_time: Optional[str] = None

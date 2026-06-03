@@ -119,12 +119,15 @@ def send_digest_if_configured(tenant_id: int, articles,
             text=text,
             recipients=context["recipients"],
         )
-        logger.info("Email sent to %s for tenant %d", context["recipients"], tenant_id)
+        all_pending = context.get("all_pending_articles", context["articles"])
+        logger.info("Email sent to %s for tenant %d (%d in email, %d archived)",
+                    context["recipients"], tenant_id,
+                    len(context["articles"]), len(all_pending))
         digest_id = _create_sent_digest(
             tenant_id, context["subject"],
-            len(context["articles"]), "regular", db,
+            len(all_pending), "regular", db,
         )
-        _archive_articles(context["articles"], digest_id, db)
+        _archive_articles(all_pending, digest_id, db)
         return True
     except Exception as exc:
         logger.error("Email send failed for tenant %d: %s", tenant_id, exc)

@@ -29,6 +29,9 @@ def build_email_context(tenant_id: int, articles: list | None,
     else:
         recipients = json.loads(config.recipients_json or "[]") if config else []
 
+    # all_pending_articles: every queued article — used for archiving after send
+    all_pending: list | None = None
+
     if articles is None:
         default_hours = (config.lookback_hours if config and config.lookback_hours
                          else {"daily": 24, "weekly": 168}.get(frequency, 24))
@@ -44,14 +47,20 @@ def build_email_context(tenant_id: int, articles: list | None,
         query = (db.query(Article)
                  .filter(Article.tenant_id == tenant_id,
                          Article.duplicate_of_id.is_(None),
-                         Article.archived_at.is_(None)))   # pending queue only
+                         Article.archived_at.is_(None)))
         if frequency != "immediate":
             query = query.filter(Article.scraped_at >= cutoff)
-        articles = (query
-                    .order_by(Article.relevance_score.desc(),
-                              Article.published_at.desc())
-                    .limit(20)
-                    .all())
+
+        all_pending = (query
+                       .order_by(Article.relevance_score.desc(),
+                                 Article.published_at.desc())
+                       .limit(500)
+                       .all())
+
+        max_n = config.max_articles_per_digest if config and config.max_articles_per_digest else None
+        articles = all_pending[:max_n] if max_n else all_pending
+    else:
+        all_pending = articles
 
     if not articles:
         return None
@@ -72,20 +81,24 @@ def build_email_context(tenant_id: int, articles: list | None,
     articles_by_category = [(cat, groups[cat]) for cat in ordered_cats]
     has_categories = any(c != "General" for c in groups)
 
+    total_pending = len(all_pending)
+
     return {
-        "tenant_name":          tenant.name,
-        "logo_url":             tenant.logo_url or "",
-        "primary_color":        tenant.primary_color or "#0066cc",
-        "intro_text":           (config.intro_text if config else "") or "",
-        "articles":             articles,
-        "articles_by_category": articles_by_category,
-        "has_categories":       has_categories,
-        "date":                 datetime.datetime.utcnow().strftime("%B %d, %Y"),
-        "subject":              subject,
-        "from_email":           config.from_email if config else "",
-        "from_name":            config.from_name if config else tenant.name,
-        "recipients":           recipients,
-        "config":               config,
+        "tenant_name":              tenant.name,
+        "logo_url":                 tenant.logo_url or "",
+        "primary_color":            tenant.primary_color or "#0066cc",
+        "intro_text":               (config.intro_text if config else "") or "",
+        "articles":                 articles,
+        "all_pending_articles":     all_pending,
+        "total_pending":            total_pending,
+        "articles_by_category":     articles_by_category,
+        "has_categories":           has_categories,
+        "date":                     datetime.datetime.utcnow().strftime("%B %d, %Y"),
+        "subject":                  subject,
+        "from_email":               config.from_email if config else "",
+        "from_name":                config.from_name if config else tenant.name,
+        "recipients":               recipients,
+        "config":                   config,
     }
 
 
