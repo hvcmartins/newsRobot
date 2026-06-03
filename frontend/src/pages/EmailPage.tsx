@@ -183,37 +183,33 @@ export default function EmailPage() {
               </div>
             </div>
 
-            {/* Articles per Category — placed high so it's always visible */}
-            <div style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Articles per Category</h2>
-                <p style={{ fontSize: 12, color: '#888', margin: '4px 0 0' }}>Max articles included per topic in each digest. All pending articles are archived after sending.</p>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {[null, 3, 5, 10, 15, 20].map((n) => {
-                  const active = (form.max_articles_per_digest ?? null) === n
-                  return (
-                    <button key={String(n)} onClick={() => set({ max_articles_per_digest: n })}
-                      style={{
-                        padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                        cursor: 'pointer', border: '1px solid',
-                        background: active ? 'var(--brand-color)' : '#fff',
-                        borderColor: active ? 'var(--brand-color)' : '#ddd',
-                        color: active ? '#fff' : '#666',
-                        transition: 'all 0.15s',
-                      }}>
-                      {n === null ? 'All' : `Top ${n}`}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
             {/* Regular Schedule */}
             <div style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <h2 style={{ fontSize: 15, fontWeight: 600 }}>Digest Schedule</h2>
 
-              {/* Day-of-week toggles */}
+              {/* Articles per category — inside this visible card so it can't be missed */}
+              <div style={{ background: '#f8f9fb', borderRadius: 8, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#444' }}>Articles per category</label>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {([null, 3, 5, 10, 15, 20] as (number | null)[]).map((n) => {
+                    const active = (form.max_articles_per_digest ?? null) === n
+                    return (
+                      <button key={String(n)} onClick={() => set({ max_articles_per_digest: n })}
+                        style={{
+                          padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 600,
+                          cursor: 'pointer', border: '1px solid',
+                          background: active ? 'var(--brand-color)' : '#fff',
+                          borderColor: active ? 'var(--brand-color)' : '#ccc',
+                          color: active ? '#fff' : '#555',
+                          transition: 'all 0.15s',
+                        }}>
+                        {n === null ? 'All' : `Top ${n}`}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p style={{ margin: 0, fontSize: 11, color: '#aaa' }}>Top N per category by relevance. All pending articles are archived after each send.</p>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Send on</label>
                 <div style={{ display: 'flex', gap: 6 }}>
