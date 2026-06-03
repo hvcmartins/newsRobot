@@ -68,4 +68,23 @@ _static_dir = next(
     None,
 )
 if _static_dir:
-    app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="static")
+    # Serve hashed asset bundles under /assets/ directly
+    _assets = _static_dir / "assets"
+    if _assets.exists():
+        app.mount("/assets", StaticFiles(directory=str(_assets)), name="assets")
+
+    # Serve other static root files (favicon, etc.)
+    from fastapi.responses import FileResponse, Response
+
+    @app.get("/favicon.svg", include_in_schema=False)
+    async def favicon():
+        f = _static_dir / "favicon.svg"
+        return FileResponse(str(f)) if f.exists() else Response(status_code=404)
+
+    # SPA catch-all — every non-API path gets index.html so React Router works
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        index = _static_dir / "index.html"
+        if index.exists():
+            return FileResponse(str(index))
+        return Response(status_code=404)
