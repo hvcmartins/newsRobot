@@ -5,47 +5,50 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>{{ subject }}</title>
   <style>
-    body { margin:0; padding:0; background:#edf0f4; -webkit-text-size-adjust:100%; }
-    img { border:0; display:block; line-height:1; }
+    body { margin:0; padding:0; background:#f0f2f5; -webkit-text-size-adjust:100%; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; }
+    img { border:0; display:block; }
     a { text-decoration:none; }
     @media (max-width:600px) {
       .outer  { padding:0 !important; }
-      .card   { border-radius:0 !important; }
-      .padded { padding:16px 18px !important; }
+      .wrap   { padding:0 10px !important; }
+      .hdr    { padding:20px 20px 18px !important; }
+      .padded { padding:16px 20px !important; }
+      .art    { padding:14px 16px !important; }
+      .thumb  { display:none !important; }
     }
   </style>
 </head>
 <body>
-<div class="outer" style="padding:28px 16px 40px; background:#edf0f4;">
-<div style="max-width:620px; margin:0 auto;">
+<div class="outer" style="padding:32px 16px 48px; background:#f0f2f5;">
+<div style="max-width:640px; margin:0 auto;">
 
-  <!-- Main card -->
-  <div class="card" style="background:#ffffff; border-radius:14px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+  <!-- ── Outer card ── -->
+  <div style="background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 2px 20px rgba(0,0,0,0.08);">
 
-    <!-- Brand accent bar -->
-    <div style="height:5px; background:{{ primary_color }};"></div>
+    <!-- Accent bar -->
+    <div style="height:4px; background:{{ primary_color }};"></div>
 
     <!-- Header -->
-    <div class="padded" style="padding:26px 32px 22px;">
+    <div class="hdr" style="padding:28px 36px 24px;">
       <table width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
           <td valign="middle">
             {% if logo_url %}
-            <img src="{{ logo_url }}" alt="{{ tenant_name }}" height="38" width="auto"
-                 style="height:38px; width:auto; max-width:180px; display:block;">
+            <img src="{{ logo_url }}" alt="{{ tenant_name }}" height="36"
+                 style="height:36px; width:auto; max-width:160px; display:block;">
             {% else %}
-            <span style="font-size:18px; font-weight:800; color:#111; letter-spacing:-0.4px;">{{ tenant_name }}</span>
+            <span style="font-size:17px; font-weight:800; color:#111; letter-spacing:-0.3px;">{{ tenant_name }}</span>
             {% endif %}
           </td>
           <td valign="middle" align="right">
-            <span style="font-size:12px; color:#aaa; font-weight:500; white-space:nowrap;">{{ date }}</span>
+            <span style="font-size:12px; color:#999; font-weight:500;">{{ date }}</span>
           </td>
         </tr>
       </table>
 
-      <div style="margin-top:18px; padding-top:18px; border-top:1px solid #f0f0f0;">
-        <p style="margin:0; font-size:22px; font-weight:800; color:#111; letter-spacing:-0.5px; line-height:1.2;">News Digest</p>
-        <p style="margin:6px 0 0; font-size:13px; color:#aaa;">
+      <div style="margin-top:20px; padding-top:20px; border-top:1px solid #efefef;">
+        <p style="margin:0 0 4px; font-size:24px; font-weight:800; color:#0d0d0d; letter-spacing:-0.6px; line-height:1.2;">News Digest</p>
+        <p style="margin:0; font-size:13px; color:#999;">
           {{ articles|length }} article{{ 's' if articles|length != 1 }}
           {% if total_pending and total_pending > articles|length %}
           &nbsp;·&nbsp; {{ total_pending }} total archived
@@ -55,7 +58,7 @@
     </div>
 
     {% if intro_text %}
-    <div class="padded" style="padding:14px 32px; background:#f8f9fb; border-top:1px solid #f0f0f0; border-bottom:1px solid #f0f0f0; font-size:13px; color:#555; line-height:1.75;">
+    <div class="padded" style="padding:14px 36px; background:#f8f9fb; border-top:1px solid #efefef; border-bottom:1px solid #efefef; font-size:13px; color:#555; line-height:1.8;">
       {{ intro_text }}
     </div>
     {% endif %}
@@ -64,61 +67,116 @@
     {% if has_categories %}
       {% for category, cat_articles in articles_by_category %}
 
-        <!-- Category label -->
-        <div class="padded" style="padding:12px 32px; background:#f8f9fb; border-top:1px solid #ececec;">
+        <!-- Category header -->
+        <div class="padded" style="padding:22px 36px 10px; background:#f7f8fa; border-top:1px solid #efefef;">
           <table cellpadding="0" cellspacing="0" border="0">
             <tr>
-              <td>
-                <span style="display:inline-block; background:{{ primary_color }}; color:#fff; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; padding:4px 12px; border-radius:20px;">{{ category }}</span>
+              <td style="border-left:3px solid {{ primary_color }}; padding-left:10px;">
+                <span style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1.4px; color:#222;">{{ category }}</span>
               </td>
-              <td style="padding-left:10px; font-size:11px; color:#bbb;">{{ cat_articles|length }} article{{ 's' if cat_articles|length != 1 }}</td>
+              <td style="padding-left:10px;">
+                <span style="font-size:11px; color:#bbb;">{{ cat_articles|length }} article{{ 's' if cat_articles|length != 1 }}</span>
+              </td>
             </tr>
           </table>
         </div>
 
-        {% for article in cat_articles %}
-        <!-- Article -->
-        <div style="border-top:1px solid #f0f0f0;">
-          <div class="padded" style="padding:20px 32px 22px;">
+        <!-- Article cards within category -->
+        <div class="wrap" style="padding:10px 20px 14px; background:#f7f8fa;">
+          {% for article in cat_articles %}
+          <div style="background:#fff; border-radius:12px; border:1px solid #ebebeb; box-shadow:0 1px 4px rgba(0,0,0,0.04); margin-bottom:10px; overflow:hidden;">
+            <div class="art" style="padding:16px 20px 18px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  {% if article.image_url %}
+                  <td class="thumb" width="76" valign="top" style="padding-right:16px; min-width:76px;">
+                    <a href="{{ article.url }}" target="_blank" rel="noopener">
+                      <img src="{{ article.image_url }}" alt="" width="76" height="76"
+                           style="width:76px; height:76px; object-fit:cover; border-radius:9px; display:block; background:#eee;">
+                    </a>
+                  </td>
+                  {% endif %}
+                  <td valign="top">
+                    <p style="margin:0 0 6px; line-height:1;">
+                      <span style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:{{ primary_color }};">{{ article.source.name }}</span>
+                      {% if article.published_at %}
+                      <span style="font-size:10px; color:#ccc; margin:0 5px;">·</span>
+                      <span style="font-size:10px; color:#bbb;">{{ article.published_at.strftime("%b %d, %Y") }}</span>
+                      {% endif %}
+                    </p>
+
+                    <p style="margin:0 0 7px; font-size:15px; font-weight:700; line-height:1.35; letter-spacing:-0.2px; color:#0d0d0d;">
+                      <a href="{{ article.url }}" target="_blank" rel="noopener" style="color:#0d0d0d;">
+                        {{ article.translated_title or article.title }}
+                      </a>
+                    </p>
+                    {% if article.translated_title and article.translated_title != article.title %}
+                    <p style="margin:0 0 7px; font-size:11px; color:#bbb; font-style:italic; line-height:1.4;">{{ article.title }}</p>
+                    {% endif %}
+
+                    {% set body = article.summary or article.excerpt %}
+                    {% if body %}
+                    <p style="margin:0 0 12px; font-size:13px; color:#555; line-height:1.72;">{{ body }}</p>
+                    {% endif %}
+
+                    <a href="{{ article.url }}" target="_blank" rel="noopener"
+                       style="display:inline-block; background:{{ primary_color }}; color:#fff; font-size:11px; font-weight:700; letter-spacing:0.3px; padding:7px 16px; border-radius:6px;">
+                      Read article &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+      {% endfor %}
+
+    {% else %}
+      <!-- Flat list (no AI categories) -->
+      <div class="wrap" style="padding:14px 20px 18px; background:#f7f8fa; border-top:1px solid #efefef;">
+        {% for article in articles %}
+        <div style="background:#fff; border-radius:12px; border:1px solid #ebebeb; box-shadow:0 1px 4px rgba(0,0,0,0.04); margin-bottom:10px; overflow:hidden;">
+          <div class="art" style="padding:16px 20px 18px;">
             <table width="100%" cellpadding="0" cellspacing="0" border="0">
               <tr>
                 {% if article.image_url %}
-                <td width="88" valign="top" style="padding-right:16px;">
+                <td class="thumb" width="76" valign="top" style="padding-right:16px; min-width:76px;">
                   <a href="{{ article.url }}" target="_blank" rel="noopener">
-                    <img src="{{ article.image_url }}" alt="" width="88" height="88"
-                         style="width:88px; height:88px; object-fit:cover; border-radius:8px; display:block; background:#f0f0f0;">
+                    <img src="{{ article.image_url }}" alt="" width="76" height="76"
+                         style="width:76px; height:76px; object-fit:cover; border-radius:9px; display:block; background:#eee;">
                   </a>
                 </td>
                 {% endif %}
                 <td valign="top">
-                  <!-- Source + date -->
-                  <p style="margin:0 0 6px;">
-                    <span style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:{{ primary_color }};">{{ article.source.name }}</span>
+                  <p style="margin:0 0 6px; line-height:1;">
+                    <span style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:{{ primary_color }};">{{ article.source.name }}</span>
+                    {% if article.category and article.category not in ('Uncategorized','Other') %}
+                    <span style="display:inline-block; font-size:10px; background:#f0f2f5; color:#666; padding:2px 8px; border-radius:20px; margin-left:5px; font-weight:500;">{{ article.category }}</span>
+                    {% endif %}
                     {% if article.published_at %}
-                    <span style="font-size:10px; color:#ccc; margin:0 4px;">·</span>
+                    <span style="font-size:10px; color:#ccc; margin:0 5px;">·</span>
                     <span style="font-size:10px; color:#bbb;">{{ article.published_at.strftime("%b %d, %Y") }}</span>
                     {% endif %}
                   </p>
 
-                  <!-- Title -->
-                  <p style="margin:0 0 6px; font-size:16px; font-weight:700; line-height:1.35; letter-spacing:-0.3px;">
-                    <a href="{{ article.url }}" target="_blank" rel="noopener" style="color:#111;">
+                  <p style="margin:0 0 7px; font-size:15px; font-weight:700; line-height:1.35; letter-spacing:-0.2px; color:#0d0d0d;">
+                    <a href="{{ article.url }}" target="_blank" rel="noopener" style="color:#0d0d0d;">
                       {{ article.translated_title or article.title }}
                     </a>
                   </p>
                   {% if article.translated_title and article.translated_title != article.title %}
-                  <p style="margin:0 0 8px; font-size:11px; color:#bbb; font-style:italic; line-height:1.4;">{{ article.title }}</p>
+                  <p style="margin:0 0 7px; font-size:11px; color:#bbb; font-style:italic;">{{ article.title }}</p>
                   {% endif %}
 
-                  <!-- Full AI summary -->
                   {% set body = article.summary or article.excerpt %}
                   {% if body %}
-                  <p style="margin:0 0 12px; font-size:13px; color:#555; line-height:1.7;">{{ body }}</p>
+                  <p style="margin:0 0 12px; font-size:13px; color:#555; line-height:1.72;">{{ body }}</p>
                   {% endif %}
 
-                  <!-- CTA link -->
                   <a href="{{ article.url }}" target="_blank" rel="noopener"
-                     style="font-size:12px; font-weight:600; color:{{ primary_color }}; text-decoration:none;">
+                     style="display:inline-block; background:{{ primary_color }}; color:#fff; font-size:11px; font-weight:700; letter-spacing:0.3px; padding:7px 16px; border-radius:6px;">
                     Read article &rarr;
                   </a>
                 </td>
@@ -127,65 +185,12 @@
           </div>
         </div>
         {% endfor %}
-
-      {% endfor %}
-
-    {% else %}
-      <!-- Flat list (no AI categories) -->
-      {% for article in articles %}
-      <div style="border-top:1px solid #f0f0f0;">
-        <div class="padded" style="padding:20px 32px 22px;">
-          <table width="100%" cellpadding="0" cellspacing="0" border="0">
-            <tr>
-              {% if article.image_url %}
-              <td width="88" valign="top" style="padding-right:16px;">
-                <a href="{{ article.url }}" target="_blank" rel="noopener">
-                  <img src="{{ article.image_url }}" alt="" width="88" height="88"
-                       style="width:88px; height:88px; object-fit:cover; border-radius:8px; display:block; background:#f0f0f0;">
-                </a>
-              </td>
-              {% endif %}
-              <td valign="top">
-                <p style="margin:0 0 6px;">
-                  <span style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:{{ primary_color }};">{{ article.source.name }}</span>
-                  {% if article.category and article.category not in ('Uncategorized','Other') %}
-                  <span style="display:inline-block; font-size:10px; background:#f0f2f5; color:#666; padding:2px 8px; border-radius:20px; margin-left:5px; font-weight:500;">{{ article.category }}</span>
-                  {% endif %}
-                  {% if article.published_at %}
-                  <span style="font-size:10px; color:#ccc; margin:0 4px;">·</span>
-                  <span style="font-size:10px; color:#bbb;">{{ article.published_at.strftime("%b %d, %Y") }}</span>
-                  {% endif %}
-                </p>
-
-                <p style="margin:0 0 6px; font-size:16px; font-weight:700; line-height:1.35; letter-spacing:-0.3px;">
-                  <a href="{{ article.url }}" target="_blank" rel="noopener" style="color:#111;">
-                    {{ article.translated_title or article.title }}
-                  </a>
-                </p>
-                {% if article.translated_title and article.translated_title != article.title %}
-                <p style="margin:0 0 8px; font-size:11px; color:#bbb; font-style:italic;">{{ article.title }}</p>
-                {% endif %}
-
-                {% set body = article.summary or article.excerpt %}
-                {% if body %}
-                <p style="margin:0 0 12px; font-size:13px; color:#555; line-height:1.7;">{{ body }}</p>
-                {% endif %}
-
-                <a href="{{ article.url }}" target="_blank" rel="noopener"
-                   style="font-size:12px; font-weight:600; color:{{ primary_color }}; text-decoration:none;">
-                  Read article &rarr;
-                </a>
-              </td>
-            </tr>
-          </table>
-        </div>
       </div>
-      {% endfor %}
     {% endif %}
 
     <!-- Truncation notice -->
     {% if total_pending and total_pending > articles|length %}
-    <div class="padded" style="padding:12px 32px; background:#fffbeb; border-top:1px solid #fde68a;">
+    <div class="padded" style="padding:14px 36px; background:#fffbeb; border-top:1px solid #fde68a;">
       <p style="margin:0; font-size:12px; color:#92400e;">
         Showing top {{ articles|length }} articles (limited per category) &mdash; all {{ total_pending }} pending articles have been archived.
       </p>
@@ -193,13 +198,13 @@
     {% endif %}
 
     <!-- Footer -->
-    <div class="padded" style="padding:20px 32px; background:#f8f9fb; border-top:1px solid #ececec; text-align:center;">
-      <p style="margin:0; font-size:11px; color:#c0c4cc; line-height:1.7;">
-        Curated by <strong style="color:#aaa;">{{ from_name }}</strong> &nbsp;&middot;&nbsp; Powered by NewsRobot
+    <div class="padded" style="padding:22px 36px; background:#fafafa; border-top:1px solid #efefef; text-align:center;">
+      <p style="margin:0; font-size:11px; color:#bbb; line-height:1.7;">
+        Curated by <strong style="color:#999;">{{ from_name }}</strong> &nbsp;&middot;&nbsp; Powered by NewsRobot
       </p>
     </div>
 
-  </div><!-- /card -->
+  </div><!-- /outer card -->
 </div><!-- /max-width -->
 </div><!-- /outer -->
 </body>
