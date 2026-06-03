@@ -5,66 +5,66 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>{{ subject }}</title>
   <style>
-    body, #bodyTable { margin:0; padding:0; width:100%; background-color:#ebebeb; }
+    body, #bodyTable { margin:0; padding:0; width:100%; background-color:#eceff4; }
     body { -webkit-text-size-adjust:100%; }
     img { border:0; display:block; }
     a   { text-decoration:none; }
-    @media (max-width:600px) {
-      .thumb   { display:none !important; }
-      .hero-td { padding:32px 24px 28px !important; }
-      .art-td  { padding:16px 20px !important; }
-      .pad-td  { padding-left:20px !important; padding-right:20px !important; }
+    /* Override email-client default purple/blue link color */
+    a, a:visited, a:hover { color:inherit; }
+    @media (max-width:660px) {
+      .img-col  { display:none !important; width:0 !important; min-width:0 !important; padding:0 !important; }
+      .hero-td  { padding:34px 24px 28px !important; }
+      .art-td   { padding:20px 24px 22px !important; }
+      .pad-td   { padding-left:24px !important; padding-right:24px !important; }
     }
   </style>
 </head>
-<body style="margin:0; padding:0; background-color:#ebebeb;">
+<body style="margin:0; padding:0; background-color:#eceff4;">
 
-<!-- ── Outer wrapper ── -->
+<!-- ── Outer shell ── -->
 <table id="bodyTable" width="100%" cellpadding="0" cellspacing="0" border="0"
-       bgcolor="#ebebeb" style="background-color:#ebebeb;">
+       bgcolor="#eceff4" style="background-color:#eceff4;">
   <tr>
-    <td align="center" style="padding:40px 16px 56px;">
+    <td align="center" style="padding:44px 16px 64px;">
 
-      <!-- ── Document card (640px) ── -->
-      <table width="640" cellpadding="0" cellspacing="0" border="0"
-             style="max-width:640px; width:100%;">
+      <!-- ═══ DOCUMENT CARD — 680px ═══ -->
+      <table width="680" cellpadding="0" cellspacing="0" border="0"
+             style="max-width:680px; width:100%;
+                    border-radius:8px; overflow:hidden; border-collapse:separate;
+                    box-shadow:0 2px 16px rgba(0,0,0,0.08);">
 
         <!-- ════ HEADER ════ -->
         <tr>
           <td class="hero-td" align="center" bgcolor="{{ primary_color }}"
-              style="background-color:{{ primary_color }}; padding:44px 48px 36px;">
+              style="background-color:{{ primary_color }};
+                     padding:52px 56px 42px;
+                     border-radius:8px 8px 0 0;">
 
-            <!-- Seal / Logo — larger -->
             {% if logo_url %}
-            <img src="{{ logo_url }}" alt="{{ tenant_name }}" width="88" height="88"
-                 style="width:88px; height:88px; display:block; margin:0 auto 18px;">
+            <img src="{{ logo_url }}" alt="{{ tenant_name }}" width="92" height="92"
+                 style="width:92px; height:92px; display:block; margin:0 auto 20px;">
             {% endif %}
 
-            <!-- Institution name — Serif, crisp, no shadow -->
             <p style="margin:0 0 10px;
                       font-family:Georgia,'Times New Roman',Times,serif;
-                      font-size:28px; font-weight:bold; color:#ffffff;
-                      letter-spacing:0.2px; line-height:1.2;">{{ tenant_name }}</p>
+                      font-size:30px; font-weight:bold; color:#ffffff;
+                      letter-spacing:0.3px; line-height:1.2;">{{ tenant_name }}</p>
 
-            <!-- Thin rule — gold tone, adapts to any dark header -->
-            <div style="width:44px; height:1px; background:rgba(255,255,255,0.45);
-                        margin:0 auto 12px; font-size:0; line-height:0;">&nbsp;</div>
+            <div style="width:48px; height:1px; background:rgba(255,255,255,0.35);
+                        margin:0 auto 13px; font-size:0; line-height:0;">&nbsp;</div>
 
-            <!-- Sub-label -->
-            <p style="margin:0 0 20px;
+            <p style="margin:0 0 22px;
                       font-family:Arial,Helvetica,sans-serif;
-                      font-size:10px; font-weight:normal; color:rgba(255,255,255,0.6);
-                      text-transform:uppercase; letter-spacing:3.5px;">News Digest</p>
+                      font-size:10px; color:rgba(255,255,255,0.58);
+                      text-transform:uppercase; letter-spacing:4px;">News Digest</p>
 
-            <!-- Date — plain text, no pill -->
             <p style="margin:0 0 10px;
                       font-family:Arial,Helvetica,sans-serif;
-                      font-size:13px; color:rgba(255,255,255,0.82);">{{ date }}</p>
+                      font-size:14px; color:rgba(255,255,255,0.84);">{{ date }}</p>
 
-            <!-- Stats -->
             <p style="margin:0;
                       font-family:Arial,Helvetica,sans-serif;
-                      font-size:11px; color:rgba(255,255,255,0.48);">
+                      font-size:11px; color:rgba(255,255,255,0.46);">
               {{ articles|length }} article{{ 's' if articles|length != 1 }}
               {% if total_pending and total_pending > articles|length %}
               &nbsp;&middot;&nbsp; {{ total_pending }} archived
@@ -73,20 +73,19 @@
           </td>
         </tr>
 
-        <!-- Gold accent rule under header -->
+        <!-- Header base rule -->
         <tr>
-          <td bgcolor="{{ primary_color }}" style="background-color:{{ primary_color }}; padding:0 0 0;">
-            <div style="height:2px; background:rgba(255,255,255,0.25); font-size:0; line-height:0;">&nbsp;</div>
+          <td bgcolor="{{ primary_color }}" style="background-color:{{ primary_color }}; padding:0; font-size:0; line-height:0; height:2px;">
+            <div style="height:2px; background:rgba(255,255,255,0.18);">&nbsp;</div>
           </td>
         </tr>
 
         {% if intro_text %}
         <tr>
-          <td bgcolor="#f9f8f6"
-              style="background-color:#f9f8f6; padding:18px 48px;
-                     border-bottom:1px solid #e2dfd9;
-                     font-family:Arial,Helvetica,sans-serif;
-                     font-size:13px; color:#666; line-height:1.85; font-style:italic; text-align:center;">
+          <td bgcolor="#f7f8fb" style="background-color:#f7f8fb; padding:20px 56px;
+               border-bottom:1px solid #e6e9ef;
+               font-family:Arial,Helvetica,sans-serif; font-size:13px;
+               color:#64707d; line-height:1.85; font-style:italic; text-align:center;">
             {{ intro_text }}
           </td>
         </tr>
@@ -97,25 +96,20 @@
 
           {% for category, cat_articles in articles_by_category %}
 
-          <!-- Category header row -->
+          <!-- Category header: left-border accent, no heavy block -->
           <tr>
             <td class="pad-td" bgcolor="#ffffff"
-                style="background-color:#ffffff; padding:28px 48px 10px;">
+                style="background-color:#ffffff; padding:34px 56px 14px;">
               <table cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td>
-                    <!-- Square institutional badge (3px radius) -->
-                    <span style="display:inline-block;
-                                 background-color:{{ primary_color }};
-                                 color:#ffffff;
-                                 font-family:Arial,Helvetica,sans-serif;
-                                 font-size:9px; font-weight:bold;
-                                 text-transform:uppercase; letter-spacing:1.4px;
-                                 padding:5px 12px; border-radius:3px;">{{ category }}</span>
-                  </td>
-                  <td style="padding-left:10px; vertical-align:middle;">
+                  <td style="border-left:3px solid {{ primary_color }}; padding-left:12px; vertical-align:middle;">
                     <span style="font-family:Arial,Helvetica,sans-serif;
-                                 font-size:11px; color:#bbb;">
+                                 font-size:10px; font-weight:bold;
+                                 color:{{ primary_color }};
+                                 text-transform:uppercase; letter-spacing:1.6px;">{{ category }}</span>
+                  </td>
+                  <td style="padding-left:12px; vertical-align:middle;">
+                    <span style="font-family:Arial,Helvetica,sans-serif; font-size:11px; color:#c0c8d4;">
                       {{ cat_articles|length }} article{{ 's' if cat_articles|length != 1 }}
                     </span>
                   </td>
@@ -124,78 +118,76 @@
             </td>
           </tr>
 
-          <!-- Articles within category -->
           {% for article in cat_articles %}
 
             {% if not loop.first %}
-            <!-- Thin rule between articles -->
             <tr>
-              <td class="pad-td" bgcolor="#ffffff"
-                  style="background-color:#ffffff; padding:0 48px;">
-                <div style="height:1px; background:#eeebe5; font-size:0; line-height:0;">&nbsp;</div>
+              <td class="pad-td" bgcolor="#ffffff" style="background-color:#ffffff; padding:0 56px;">
+                <div style="height:1px; background:#edf0f5; font-size:0; line-height:0;">&nbsp;</div>
               </td>
             </tr>
             {% endif %}
 
+            <!-- Article row: 3:2 image left, text right -->
             <tr>
               <td class="art-td pad-td" bgcolor="#ffffff"
-                  style="background-color:#ffffff; padding:20px 48px;">
+                  style="background-color:#ffffff; padding:26px 56px 28px;">
                 <table width="100%" cellpadding="0" cellspacing="0" border="0">
                   <tr>
                     {% if article.image_url %}
-                    <td class="thumb" width="108" valign="top"
-                        style="padding-right:20px; width:108px; min-width:108px;">
+                    <td class="img-col" width="200" valign="top"
+                        style="width:200px; min-width:200px; padding-right:26px;">
                       <a href="{{ article.url }}" target="_blank" rel="noopener">
-                        <img src="{{ article.image_url }}" alt="" width="108" height="76"
-                             style="width:108px; height:76px; object-fit:cover;
-                                    border-radius:2px; display:block; background:#e0ddd8;">
+                        <img src="{{ article.image_url }}" alt="" width="200" height="133"
+                             style="width:200px; height:133px; object-fit:cover;
+                                    border-radius:6px; display:block; background:#dce2ea;">
                       </a>
                     </td>
                     {% endif %}
                     <td valign="top">
-                      <!-- Source · Date — muted uppercase -->
-                      <p style="margin:0 0 7px;
+                      <!-- SOURCE · DATE -->
+                      <p style="margin:0 0 8px;
                                 font-family:Arial,Helvetica,sans-serif;
-                                font-size:10px; color:#aaa;
-                                text-transform:uppercase; letter-spacing:0.8px;">
+                                font-size:10px; color:#9ba8b6;
+                                text-transform:uppercase; letter-spacing:0.9px;">
                         {{ article.source.name }}
                         {% if article.published_at %}
                         &nbsp;&middot;&nbsp; {{ article.published_at.strftime("%B %d, %Y") }}
                         {% endif %}
                       </p>
 
-                      <!-- Title — Serif -->
-                      <p style="margin:0 0 9px;
+                      <!-- TITLE — Georgia serif, deep navy, forced via span -->
+                      <p style="margin:0 0 10px;
                                 font-family:Georgia,'Times New Roman',Times,serif;
-                                font-size:16px; font-weight:bold;
-                                line-height:1.38; color:#1a1a1a;">
+                                font-size:17px; font-weight:bold;
+                                line-height:1.4; color:#1e2a3a;">
                         <a href="{{ article.url }}" target="_blank" rel="noopener"
-                           style="color:#1a1a1a; text-decoration:none;">
-                          {{ article.translated_title or article.title }}
+                           style="color:#1e2a3a; text-decoration:none;">
+                          <span style="color:#1e2a3a;">{{ article.translated_title or article.title }}</span>
                         </a>
                       </p>
                       {% if article.translated_title and article.translated_title != article.title %}
                       <p style="margin:0 0 8px;
                                 font-family:Arial,Helvetica,sans-serif;
-                                font-size:11px; color:#bbb; font-style:italic; line-height:1.4;">
-                        {{ article.title }}
-                      </p>
+                                font-size:11px; color:#c0c8d4;
+                                font-style:italic; line-height:1.4;">{{ article.title }}</p>
                       {% endif %}
 
-                      <!-- Summary — sans-serif -->
+                      <!-- SUMMARY -->
                       {% set body = article.summary or article.excerpt %}
                       {% if body %}
-                      <p style="margin:0 0 13px;
+                      <p style="margin:0 0 14px;
                                 font-family:Arial,Helvetica,sans-serif;
-                                font-size:13px; color:#555; line-height:1.76;">{{ body }}</p>
+                                font-size:13px; color:#56626e; line-height:1.77;">{{ body }}</p>
                       {% endif %}
 
-                      <!-- CTA — minimal, uppercase, institutional -->
+                      <!-- CTA -->
                       <a href="{{ article.url }}" target="_blank" rel="noopener"
                          style="font-family:Arial,Helvetica,sans-serif;
-                                font-size:10px; font-weight:bold; color:{{ primary_color }};
-                                text-transform:uppercase; letter-spacing:0.8px;">
-                        Read full article &rarr;
+                                font-size:10px; font-weight:bold;
+                                color:#1e2a3a; text-transform:uppercase; letter-spacing:0.9px;
+                                text-decoration:none;">
+                        <span style="color:#1e2a3a;">Read full article &rarr;</span>
                       </a>
                     </td>
                   </tr>
@@ -205,9 +197,9 @@
 
           {% endfor %}
 
-          <!-- Bottom padding after each category -->
+          <!-- Spacer after each category group -->
           <tr>
-            <td bgcolor="#ffffff" style="background-color:#ffffff; height:16px; font-size:0; line-height:0;">&nbsp;</td>
+            <td bgcolor="#ffffff" style="background-color:#ffffff; height:18px; font-size:0; line-height:0;">&nbsp;</td>
           </tr>
 
           {% endfor %}
@@ -215,37 +207,40 @@
         {% else %}
 
           <!-- Flat list (no AI categories) -->
+          <tr>
+            <td bgcolor="#ffffff" style="background-color:#ffffff; height:10px; font-size:0; line-height:0;">&nbsp;</td>
+          </tr>
+
           {% for article in articles %}
 
             {% if not loop.first %}
             <tr>
-              <td class="pad-td" bgcolor="#ffffff"
-                  style="background-color:#ffffff; padding:0 48px;">
-                <div style="height:1px; background:#eeebe5; font-size:0; line-height:0;">&nbsp;</div>
+              <td class="pad-td" bgcolor="#ffffff" style="background-color:#ffffff; padding:0 56px;">
+                <div style="height:1px; background:#edf0f5; font-size:0; line-height:0;">&nbsp;</div>
               </td>
             </tr>
             {% endif %}
 
             <tr>
               <td class="art-td pad-td" bgcolor="#ffffff"
-                  style="background-color:#ffffff; padding:20px 48px;">
+                  style="background-color:#ffffff; padding:26px 56px 28px;">
                 <table width="100%" cellpadding="0" cellspacing="0" border="0">
                   <tr>
                     {% if article.image_url %}
-                    <td class="thumb" width="108" valign="top"
-                        style="padding-right:20px; width:108px; min-width:108px;">
+                    <td class="img-col" width="200" valign="top"
+                        style="width:200px; min-width:200px; padding-right:26px;">
                       <a href="{{ article.url }}" target="_blank" rel="noopener">
-                        <img src="{{ article.image_url }}" alt="" width="108" height="76"
-                             style="width:108px; height:76px; object-fit:cover;
-                                    border-radius:2px; display:block; background:#e0ddd8;">
+                        <img src="{{ article.image_url }}" alt="" width="200" height="133"
+                             style="width:200px; height:133px; object-fit:cover;
+                                    border-radius:6px; display:block; background:#dce2ea;">
                       </a>
                     </td>
                     {% endif %}
                     <td valign="top">
-                      <p style="margin:0 0 7px;
+                      <p style="margin:0 0 8px;
                                 font-family:Arial,Helvetica,sans-serif;
-                                font-size:10px; color:#aaa;
-                                text-transform:uppercase; letter-spacing:0.8px;">
+                                font-size:10px; color:#9ba8b6;
+                                text-transform:uppercase; letter-spacing:0.9px;">
                         {{ article.source.name }}
                         {% if article.category and article.category not in ('Uncategorized','Other') %}
                         &nbsp;&middot;&nbsp; {{ article.category }}
@@ -255,33 +250,34 @@
                         {% endif %}
                       </p>
 
-                      <p style="margin:0 0 9px;
+                      <p style="margin:0 0 10px;
                                 font-family:Georgia,'Times New Roman',Times,serif;
-                                font-size:16px; font-weight:bold;
-                                line-height:1.38; color:#1a1a1a;">
+                                font-size:17px; font-weight:bold;
+                                line-height:1.4; color:#1e2a3a;">
                         <a href="{{ article.url }}" target="_blank" rel="noopener"
-                           style="color:#1a1a1a; text-decoration:none;">
-                          {{ article.translated_title or article.title }}
+                           style="color:#1e2a3a; text-decoration:none;">
+                          <span style="color:#1e2a3a;">{{ article.translated_title or article.title }}</span>
                         </a>
                       </p>
                       {% if article.translated_title and article.translated_title != article.title %}
                       <p style="margin:0 0 8px;
                                 font-family:Arial,Helvetica,sans-serif;
-                                font-size:11px; color:#bbb; font-style:italic;">{{ article.title }}</p>
+                                font-size:11px; color:#c0c8d4; font-style:italic;">{{ article.title }}</p>
                       {% endif %}
 
                       {% set body = article.summary or article.excerpt %}
                       {% if body %}
-                      <p style="margin:0 0 13px;
+                      <p style="margin:0 0 14px;
                                 font-family:Arial,Helvetica,sans-serif;
-                                font-size:13px; color:#555; line-height:1.76;">{{ body }}</p>
+                                font-size:13px; color:#56626e; line-height:1.77;">{{ body }}</p>
                       {% endif %}
 
                       <a href="{{ article.url }}" target="_blank" rel="noopener"
                          style="font-family:Arial,Helvetica,sans-serif;
-                                font-size:10px; font-weight:bold; color:{{ primary_color }};
-                                text-transform:uppercase; letter-spacing:0.8px;">
-                        Read full article &rarr;
+                                font-size:10px; font-weight:bold;
+                                color:#1e2a3a; text-transform:uppercase;
+                                letter-spacing:0.9px; text-decoration:none;">
+                        <span style="color:#1e2a3a;">Read full article &rarr;</span>
                       </a>
                     </td>
                   </tr>
@@ -292,7 +288,7 @@
           {% endfor %}
 
           <tr>
-            <td bgcolor="#ffffff" style="background-color:#ffffff; height:20px; font-size:0; line-height:0;">&nbsp;</td>
+            <td bgcolor="#ffffff" style="background-color:#ffffff; height:22px; font-size:0; line-height:0;">&nbsp;</td>
           </tr>
 
         {% endif %}
@@ -300,9 +296,10 @@
         <!-- Truncation notice -->
         {% if total_pending and total_pending > articles|length %}
         <tr>
-          <td bgcolor="#f9f7f3"
-              style="background-color:#f9f7f3; padding:12px 48px; border-top:1px solid #e2dfd9;">
-            <p style="margin:0; font-family:Arial,Helvetica,sans-serif; font-size:11px; color:#999;">
+          <td bgcolor="#f5f7fa" style="background-color:#f5f7fa; padding:14px 56px;
+               border-top:1px solid #e6e9ef;">
+            <p style="margin:0; font-family:Arial,Helvetica,sans-serif;
+                      font-size:11px; color:#9ba8b6;">
               Showing top {{ articles|length }} articles (limited per category)
               &mdash; all {{ total_pending }} pending articles have been archived.
             </p>
@@ -313,12 +310,14 @@
         <!-- ════ FOOTER ════ -->
         <tr>
           <td align="center" bgcolor="{{ primary_color }}"
-              style="background-color:{{ primary_color }}; padding:22px 48px;">
-            <div style="width:36px; height:1px; background:rgba(255,255,255,0.3);
+              style="background-color:{{ primary_color }};
+                     padding:26px 56px;
+                     border-radius:0 0 8px 8px;">
+            <div style="width:36px; height:1px; background:rgba(255,255,255,0.28);
                         margin:0 auto 14px; font-size:0; line-height:0;">&nbsp;</div>
             <p style="margin:0;
                       font-family:Arial,Helvetica,sans-serif;
-                      font-size:11px; color:rgba(255,255,255,0.6); line-height:1.7;">
+                      font-size:11px; color:rgba(255,255,255,0.58); line-height:1.7;">
               Curated by
               <strong style="color:rgba(255,255,255,0.85);">{{ from_name }}</strong>
               &nbsp;&middot;&nbsp; Powered by NewsRobot
