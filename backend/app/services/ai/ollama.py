@@ -151,9 +151,12 @@ class OllamaProvider(AIProvider):
         data = self._ask_json(SUGGEST_CATEGORIES_PROMPT.format(topic_profile=topic_profile))
         return [str(c).strip() for c in data.get("categories", []) if str(c).strip()]
 
-    def discover_sources(self, topic_profile) -> list[dict]:
+    def discover_sources(self, topic_profile, accepted_languages=None) -> list[dict]:
+        from app.services.ai.base import build_language_constraint
+        lang = build_language_constraint(accepted_languages)
+        system = DISCOVER_SYSTEM.format(language_constraint=lang)
         user = DISCOVER_USER_TPL.format(topic_profile=topic_profile)
-        return normalise_discovered(self._ask_array(user, system=DISCOVER_SYSTEM))
+        return normalise_discovered(self._ask_array(user, system=system))
 
     def recommend_sources(self, topic_profile, catalog) -> list[int]:
         if not catalog:

@@ -145,9 +145,12 @@ class LlamaCppProvider(AIProvider):
         ))
         return [str(c).strip() for c in data.get("categories", []) if str(c).strip()]
 
-    def discover_sources(self, topic_profile) -> list[dict]:
+    def discover_sources(self, topic_profile, accepted_languages=None) -> list[dict]:
+        from app.services.ai.base import build_language_constraint
+        lang = build_language_constraint(accepted_languages)
         # Use a shorter prompt and more tokens so the response isn't truncated
-        prompt = DISCOVER_PROMPT_SHORT.format(topic_profile=topic_profile)
+        prompt = DISCOVER_PROMPT_SHORT.format(topic_profile=topic_profile,
+                                              language_constraint=lang)
         raw = self._ask(prompt, max_tokens=2048)
         logger.debug("llama.cpp discover raw output: %s", raw[:500])
 

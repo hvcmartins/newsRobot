@@ -53,6 +53,22 @@ Return JSON only:
 # ── Source discovery prompts ───────────────────────────────────────────────────
 # Split into system (stable instructions) and user (per-tenant profile).
 
+_LANG_NAMES = {
+    "en": "English", "pt": "Portuguese", "fr": "French", "de": "German",
+    "es": "Spanish", "it": "Italian", "nl": "Dutch", "ar": "Arabic",
+    "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "ru": "Russian",
+    "tet": "Tetum", "id": "Indonesian", "ms": "Malay",
+}
+
+
+def build_language_constraint(accepted_languages: list[str] | None) -> str:
+    """Return a one-liner constraint for discovery prompts, or empty string."""
+    if not accepted_languages:
+        return ""
+    names = [_LANG_NAMES.get(l, l.upper()) for l in accepted_languages]
+    return f"- ONLY suggest sources that publish in: {', '.join(names)}. Do NOT suggest sources that publish exclusively in other languages.\n"
+
+
 DISCOVER_SYSTEM = """\
 You are a news research expert. Suggest 12-15 reliable news sources for the \
 company profile you will receive.
@@ -67,7 +83,7 @@ https://feeds.bbci.co.uk/news/world/rss.xml).
 - Do NOT invent URLs — if unsure of the exact feed path, use the homepage URL \
 and set type to "scrape".
 - Aim for diversity: different publishers, different countries, different formats.
-
+{language_constraint}
 Return ONLY a JSON array — no surrounding text, no markdown fences.
 Each element must have exactly these keys:
   name        (string)  – publication name
@@ -118,7 +134,7 @@ Rules:
 - Required keys: name, url, type, category, description, reason
 - type must be "rss" or "scrape"
 - category must be one of: Technology, Finance, Business, Politics, Science, Health, Sports, World News, Environment, Other
-
+{language_constraint}
 Example (follow this format exactly):
 [
 {{"name":"BBC News","url":"https://feeds.bbci.co.uk/news/rss.xml","type":"rss","category":"World News","description":"Global news from the BBC","reason":"Broad international coverage"}},
@@ -450,7 +466,8 @@ class AIProvider(ABC):
         ...
 
     @abstractmethod
-    def discover_sources(self, topic_profile: str) -> list[dict]:
+    def discover_sources(self, topic_profile: str,
+                         accepted_languages: list[str] | None = None) -> list[dict]:
         """Return a list of suggested source dicts: name, url, type, category,
         description, reason.  Prefer RSS feed URLs over plain websites."""
         ...

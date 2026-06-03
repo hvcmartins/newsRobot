@@ -120,7 +120,8 @@ def _check_url(url: str) -> tuple[bool, str | None]:
 
 
 def _run_discovery_job(job_id: str, tenant_id: int, topic_profile: str,
-                       tenant_name: str) -> None:
+                       tenant_name: str,
+                       accepted_languages: list[str] | None = None) -> None:
     """Background worker — runs AI discovery + web search + URL validation."""
     from app.database import SessionLocal
     from app.services.ai.factory import get_ai_provider, pause_enrichment, resume_enrichment
@@ -133,7 +134,7 @@ def _run_discovery_job(job_id: str, tenant_id: int, topic_profile: str,
 
         ai = get_ai_provider(db)
         try:
-            suggestions = ai.discover_sources(topic_profile)
+            suggestions = ai.discover_sources(topic_profile, accepted_languages)
         except Exception as exc:
             logger.error("AI source discovery failed: %s", exc)
             ai_error = exc
@@ -141,7 +142,7 @@ def _run_discovery_job(job_id: str, tenant_id: int, topic_profile: str,
         # Augment with web search (failure is acceptable)
         try:
             from app.services.feed_search import web_search_feeds
-            web_feeds = web_search_feeds(topic_profile)
+            web_feeds = web_search_feeds(topic_profile, accepted_languages=accepted_languages)
             ai_urls = {s["url"] for s in suggestions}
             new_from_web = [f for f in web_feeds if f["url"] not in ai_urls]
             if new_from_web:
@@ -235,9 +236,13 @@ def discover_sources(tenant_id: int, background_tasks: BackgroundTasks,
         for k in oldest:
             _discovery_jobs.pop(k, None)
 
-    logger.info("Source discovery job %s started for '%s'", job_id, tenant.name)
+    import json as _json
+    accepted_langs = _json.loads(tenant.accepted_languages or "[]") or None
+    logger.info("Source discovery job %s started for '%s' (languages=%s)",
+                job_id, tenant.name, accepted_langs)
     background_tasks.add_task(
-        _run_discovery_job, job_id, tenant_id, tenant.topic_profile, tenant.name
+        _run_discovery_job, job_id, tenant_id, tenant.topic_profile,
+        tenant.name, accepted_langs
     )
     return {"job_id": job_id, "status": "running"}
 

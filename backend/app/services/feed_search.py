@@ -121,13 +121,25 @@ def _ai_search_queries(profile: str) -> list[str] | None:
     return None
 
 
-def web_search_feeds(topic_profile: str, max_results: int = 12) -> list[dict]:
+def web_search_feeds(topic_profile: str, max_results: int = 12,
+                     accepted_languages: list[str] | None = None) -> list[dict]:
     """Return RSS feeds found via web search for the topic profile.
 
     Priority: Serper.dev → Google Custom Search → DuckDuckGo.
     Uses AI to generate one targeted query per topic section; falls back
     to proper-noun extraction. Returns empty list on failure.
     """
+    _LANG_NAMES = {
+        "en": "English", "pt": "Portuguese", "fr": "French", "de": "German",
+        "es": "Spanish", "it": "Italian", "nl": "Dutch", "ar": "Arabic",
+        "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "ru": "Russian",
+        "tet": "Tetum", "id": "Indonesian", "ms": "Malay",
+    }
+    lang_suffix = ""
+    if accepted_languages:
+        names = [_LANG_NAMES.get(l, l.upper()) for l in accepted_languages]
+        lang_suffix = " " + " OR ".join(names)
+
     creds = _load_search_creds()
     if creds:
         provider, kwargs = creds
@@ -139,7 +151,7 @@ def web_search_feeds(topic_profile: str, max_results: int = 12) -> list[dict]:
     page_urls: set[str] = set()
 
     for q in queries[:8]:
-        search_q = f"{q} RSS feed"
+        search_q = f"{q}{lang_suffix} RSS feed"
         try:
             if creds and provider == "serper":
                 hits = _serper_search(search_q, **kwargs)

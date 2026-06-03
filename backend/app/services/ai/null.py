@@ -25,5 +25,5 @@ class NullProvider(AIProvider):
     def suggest_categories(self, topic_profile) -> list[str]:
         return []
 
-    def discover_sources(self, topic_profile) -> list[dict]:
+    def discover_sources(self, topic_profile, accepted_languages=None) -> list[dict]:
         return []
