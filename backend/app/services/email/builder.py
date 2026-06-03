@@ -58,11 +58,11 @@ def build_email_context(tenant_id: int, articles: list | None,
                        .all())
 
         max_n = config.max_articles_per_digest if config and config.max_articles_per_digest else None
-        articles = all_pending[:max_n] if max_n else all_pending
     else:
         all_pending = articles
+        max_n = None
 
-    if not articles:
+    if not all_pending:
         return None
 
     subject_tmpl = (config.subject_template if config and config.subject_template
@@ -72,13 +72,22 @@ def build_email_context(tenant_id: int, articles: list | None,
                .replace("{{date}}", datetime.datetime.utcnow().strftime("%B %d, %Y")))
 
     _UNCATEGORIZED = {"Uncategorized", "Other", "", None}
+
+    # Group all pending by category first
     groups: dict[str, list] = defaultdict(list)
-    for a in articles:
+    for a in all_pending:
         cat = a.category if a.category and a.category not in _UNCATEGORIZED else "General"
         groups[cat].append(a)
 
     ordered_cats = sorted(groups.keys(), key=lambda c: (c == "General", c))
-    articles_by_category = [(cat, groups[cat]) for cat in ordered_cats]
+
+    # Apply per-category limit — articles are already sorted by relevance desc
+    if max_n:
+        articles_by_category = [(cat, groups[cat][:max_n]) for cat in ordered_cats]
+    else:
+        articles_by_category = [(cat, groups[cat]) for cat in ordered_cats]
+
+    articles = [a for _, cat_arts in articles_by_category for a in cat_arts]
     has_categories = any(c != "General" for c in groups)
 
     total_pending = len(all_pending)

@@ -230,9 +230,9 @@ export default function EmailPage() {
 
               {/* Max articles */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Articles per digest</label>
+                <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Articles per category</label>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {[null, 5, 10, 15, 20, 30, 50].map((n) => {
+                  {[null, 3, 5, 10, 15, 20].map((n) => {
                     const active = (form.max_articles_per_digest ?? null) === n
                     return (
                       <button key={String(n)} onClick={() => set({ max_articles_per_digest: n })}
@@ -249,7 +249,7 @@ export default function EmailPage() {
                   })}
                 </div>
                 <p style={{ fontSize: 11, color: '#aaa', margin: 0 }}>
-                  Articles are ranked by relevance. All pending articles are archived after each send regardless of this limit.
+                  Limit applied per category — ensures balanced coverage. All pending articles are archived after each send.
                 </p>
               </div>
             </div>
