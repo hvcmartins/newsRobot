@@ -50,6 +50,7 @@ export default function EmailPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [testMsg, setTestMsg] = useState<string | null>(null)
   const [sendNowConfirm, setSendNowConfirm] = useState(false)
+  const [previewTs, setPreviewTs] = useState(Date.now())
 
   useEffect(() => {
     if (existing) setForm({ ...existing, smtp_password: '' })
@@ -83,6 +84,7 @@ export default function EmailPage() {
         await emailApi.create(payload)
       }
       qc.invalidateQueries({ queryKey: ['email-config', tenantId] })
+      setPreviewTs(Date.now())
     } catch (e: unknown) {
       setSaveError(e instanceof Error ? e.message : 'Save failed')
     } finally {
@@ -374,10 +376,19 @@ export default function EmailPage() {
 
           {/* Email preview */}
           <div style={{ background: '#fff', borderRadius: 10, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.07)', position: 'sticky', top: 24 }}>
-            <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Email Preview</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Email Preview</h2>
+              {existing && (
+                <button onClick={() => setPreviewTs(Date.now())}
+                  style={{ background: 'none', border: '1px solid #ddd', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: '#666', cursor: 'pointer' }}>
+                  ↺ Refresh
+                </button>
+              )}
+            </div>
             {existing ? (
               <iframe
-                src={emailApi.previewUrl(tenantId)}
+                key={previewTs}
+                src={`${emailApi.previewUrl(tenantId)}?t=${previewTs}`}
                 style={{ width: '100%', height: 640, border: '1px solid #eee', borderRadius: 6 }}
                 title="Email preview"
               />

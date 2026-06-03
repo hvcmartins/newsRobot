@@ -2,145 +2,192 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>{{ subject }}</title>
+  <style>
+    body { margin:0; padding:0; background:#edf0f4; -webkit-text-size-adjust:100%; }
+    img { border:0; display:block; line-height:1; }
+    a { text-decoration:none; }
+    @media (max-width:600px) {
+      .outer  { padding:0 !important; }
+      .card   { border-radius:0 !important; }
+      .padded { padding:16px 18px !important; }
+      .art-img { height:160px !important; }
+    }
+  </style>
 </head>
-<body style="margin:0;padding:0;background:#f2f3f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#1a1a1a;">
+<body>
+<div class="outer" style="padding:28px 16px 40px; background:#edf0f4;">
+<div style="max-width:620px; margin:0 auto;">
 
-<div style="max-width:620px;margin:28px auto;padding:0 12px;">
+  <!-- Main card -->
+  <div class="card" style="background:#ffffff; border-radius:14px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,0.08);">
 
-  <!-- Header -->
-  <div style="background:#ffffff;border-radius:10px 10px 0 0;padding:18px 28px 16px;border-bottom:3px solid {{ primary_color }};">
-    <table width="100%" cellpadding="0" cellspacing="0" border="0">
-      <tr>
-        <td valign="middle">
-          {% if logo_url %}
-          <img src="{{ logo_url }}" alt="{{ tenant_name }}" height="36" width="auto"
-               style="height:36px;width:auto;max-width:160px;display:block;border:0;">
-          {% else %}
-          <span style="font-size:17px;font-weight:700;color:#111;letter-spacing:-0.2px;">{{ tenant_name }}</span>
+    <!-- Brand accent bar -->
+    <div style="height:5px; background:{{ primary_color }};"></div>
+
+    <!-- Header -->
+    <div class="padded" style="padding:26px 32px 22px;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td valign="middle">
+            {% if logo_url %}
+            <img src="{{ logo_url }}" alt="{{ tenant_name }}" height="38" width="auto"
+                 style="height:38px; width:auto; max-width:180px; display:block;">
+            {% else %}
+            <span style="font-size:18px; font-weight:800; color:#111; letter-spacing:-0.4px;">{{ tenant_name }}</span>
+            {% endif %}
+          </td>
+          <td valign="middle" align="right">
+            <span style="font-size:12px; color:#aaa; font-weight:500; white-space:nowrap;">{{ date }}</span>
+          </td>
+        </tr>
+      </table>
+
+      <div style="margin-top:18px; padding-top:18px; border-top:1px solid #f0f0f0;">
+        <p style="margin:0; font-size:22px; font-weight:800; color:#111; letter-spacing:-0.5px; line-height:1.2;">News Digest</p>
+        <p style="margin:6px 0 0; font-size:13px; color:#aaa;">
+          {{ articles|length }} article{{ 's' if articles|length != 1 }}
+          {% if total_pending and total_pending > articles|length %}
+          &nbsp;·&nbsp; {{ total_pending }} total archived
           {% endif %}
-        </td>
-        <td valign="middle" align="right" style="white-space:nowrap;">
-          <div style="font-size:12px;color:#999;font-weight:500;">{{ date }}</div>
-          <div style="font-size:11px;color:#bbb;margin-top:3px;">
-            {{ articles|length }} article{{ 's' if articles|length != 1 else '' }}{% if total_pending and total_pending > articles|length %} of {{ total_pending }}{% endif %}
-          </div>
-        </td>
-      </tr>
-    </table>
-  </div>
-
-  {% if intro_text %}
-  <div style="background:#fff;padding:14px 28px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#555;line-height:1.75;">
-    {{ intro_text }}
-  </div>
-  {% endif %}
-
-  <!-- Articles -->
-  {% if has_categories %}
-    {% for category, cat_articles in articles_by_category %}
-
-      {% if category != "General" %}
-      <!-- Category label -->
-      <div style="background:#f8f9fa;padding:9px 28px 9px 25px;border-left:3px solid {{ primary_color }};border-top:1px solid #eee;">
-        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.4px;color:{{ primary_color }};">{{ category }}</span>
-        <span style="font-size:10px;color:#ccc;margin-left:8px;">{{ cat_articles|length }}</span>
-      </div>
-      {% endif %}
-
-      {% for article in cat_articles %}
-      <!-- Article card -->
-      <div style="background:#ffffff;border-left:3px solid {{ primary_color }};padding:16px 24px 14px 21px;border-top:1px solid #f0f0f0;">
-        <!-- Meta row -->
-        <div style="margin-bottom:7px;">
-          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:{{ primary_color }};">{{ article.source.name }}</span>
-          {% if article.category and article.category not in ('Uncategorized', 'Other', 'General') %}
-          <span style="font-size:10px;background:#f0f0f0;color:#777;padding:2px 7px;border-radius:10px;margin-left:6px;">{{ article.category }}</span>
-          {% endif %}
-          {% if article.published_at %}
-          <span style="font-size:11px;color:#bbb;margin-left:6px;">{{ article.published_at.strftime("%b %d") }}</span>
-          {% endif %}
-        </div>
-        <!-- Title -->
-        <div style="margin-bottom:7px;">
-          <a href="{{ article.url }}" target="_blank" rel="noopener"
-             style="font-size:15px;font-weight:600;line-height:1.4;color:#111;text-decoration:none;">
-            {{ article.translated_title or article.title }}
-          </a>
-          {% if article.translated_title and article.translated_title != article.title %}
-          <div style="margin-top:3px;font-size:12px;color:#aaa;font-style:italic;">{{ article.title }}</div>
-          {% endif %}
-        </div>
-        <!-- Summary -->
-        {% set display_text = article.summary or article.excerpt %}
-        {% if display_text %}
-        <p style="margin:0 0 10px;font-size:13px;color:#555;line-height:1.65;">
-          {{ display_text[:340] }}{% if display_text|length > 340 %}…{% endif %}
         </p>
-        {% endif %}
-        <!-- Read link -->
-        <a href="{{ article.url }}" target="_blank" rel="noopener"
-           style="font-size:12px;font-weight:600;color:{{ primary_color }};text-decoration:none;">
-          Read article →
-        </a>
       </div>
+    </div>
+
+    {% if intro_text %}
+    <div class="padded" style="padding:14px 32px; background:#f8f9fb; border-top:1px solid #f0f0f0; border-bottom:1px solid #f0f0f0; font-size:13px; color:#555; line-height:1.75;">
+      {{ intro_text }}
+    </div>
+    {% endif %}
+
+    <!-- ─── Articles ──────────────────────────────────────────── -->
+    {% if has_categories %}
+      {% for category, cat_articles in articles_by_category %}
+
+        <!-- Category label -->
+        <div class="padded" style="padding:12px 32px; background:#f8f9fb; border-top:1px solid #ececec;">
+          <table cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td>
+                <span style="display:inline-block; background:{{ primary_color }}; color:#fff; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; padding:4px 12px; border-radius:20px;">{{ category }}</span>
+              </td>
+              <td style="padding-left:10px; font-size:11px; color:#bbb;">{{ cat_articles|length }} article{{ 's' if cat_articles|length != 1 }}</td>
+            </tr>
+          </table>
+        </div>
+
+        {% for article in cat_articles %}
+        <!-- Article -->
+        <div style="border-top:1px solid #f0f0f0;">
+          {% if article.image_url %}
+          <div class="art-img" style="height:220px; overflow:hidden; background:#f0f0f0;">
+            <img src="{{ article.image_url }}" alt="" width="100%"
+                 style="width:100%; height:220px; object-fit:cover; display:block;">
+          </div>
+          {% endif %}
+
+          <div class="padded" style="padding:22px 32px 24px;">
+            <!-- Source + date -->
+            <p style="margin:0 0 10px;">
+              <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:{{ primary_color }};">{{ article.source.name }}</span>
+              {% if article.published_at %}
+              <span style="font-size:11px; color:#ccc; margin:0 5px;">·</span>
+              <span style="font-size:11px; color:#bbb;">{{ article.published_at.strftime("%b %d, %Y") }}</span>
+              {% endif %}
+            </p>
+
+            <!-- Title -->
+            <p style="margin:0 0 4px; font-size:18px; font-weight:700; line-height:1.35; letter-spacing:-0.3px;">
+              <a href="{{ article.url }}" target="_blank" rel="noopener" style="color:#111;">
+                {{ article.translated_title or article.title }}
+              </a>
+            </p>
+            {% if article.translated_title and article.translated_title != article.title %}
+            <p style="margin:0 0 12px; font-size:12px; color:#bbb; font-style:italic; line-height:1.4;">{{ article.title }}</p>
+            {% endif %}
+
+            <!-- Full AI summary -->
+            {% set body = article.summary or article.excerpt %}
+            {% if body %}
+            <p style="margin:12px 0 18px; font-size:14px; color:#444; line-height:1.75;">{{ body }}</p>
+            {% endif %}
+
+            <!-- CTA button -->
+            <a href="{{ article.url }}" target="_blank" rel="noopener"
+               style="display:inline-block; background:{{ primary_color }}; color:#ffffff; font-size:12px; font-weight:600; padding:9px 20px; border-radius:7px; letter-spacing:0.2px;">
+              Read article &rarr;
+            </a>
+          </div>
+        </div>
+        {% endfor %}
+
       {% endfor %}
 
-    {% endfor %}
+    {% else %}
+      <!-- Flat list (no AI categories) -->
+      {% for article in articles %}
+      <div style="border-top:1px solid #f0f0f0;">
+        {% if article.image_url %}
+        <div class="art-img" style="height:220px; overflow:hidden; background:#f0f0f0;">
+          <img src="{{ article.image_url }}" alt="" width="100%"
+               style="width:100%; height:220px; object-fit:cover; display:block;">
+        </div>
+        {% endif %}
 
-  {% else %}
-    <!-- Flat list (no categories) -->
-    {% for article in articles %}
-    <div style="background:#ffffff;border-left:3px solid {{ primary_color }};padding:16px 24px 14px 21px;border-top:1px solid #f0f0f0;">
-      <div style="margin-bottom:7px;">
-        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:{{ primary_color }};">{{ article.source.name }}</span>
-        {% if article.category and article.category not in ('Uncategorized', 'Other') %}
-        <span style="font-size:10px;background:#f0f0f0;color:#777;padding:2px 7px;border-radius:10px;margin-left:6px;">{{ article.category }}</span>
-        {% endif %}
-        {% if article.published_at %}
-        <span style="font-size:11px;color:#bbb;margin-left:6px;">{{ article.published_at.strftime("%b %d") }}</span>
-        {% endif %}
+        <div class="padded" style="padding:22px 32px 24px;">
+          <p style="margin:0 0 10px;">
+            <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:{{ primary_color }};">{{ article.source.name }}</span>
+            {% if article.category and article.category not in ('Uncategorized','Other') %}
+            <span style="display:inline-block; font-size:10px; background:#f0f2f5; color:#666; padding:2px 9px; border-radius:20px; margin-left:6px; font-weight:500;">{{ article.category }}</span>
+            {% endif %}
+            {% if article.published_at %}
+            <span style="font-size:11px; color:#ccc; margin:0 5px;">·</span>
+            <span style="font-size:11px; color:#bbb;">{{ article.published_at.strftime("%b %d, %Y") }}</span>
+            {% endif %}
+          </p>
+
+          <p style="margin:0 0 4px; font-size:18px; font-weight:700; line-height:1.35; letter-spacing:-0.3px;">
+            <a href="{{ article.url }}" target="_blank" rel="noopener" style="color:#111;">
+              {{ article.translated_title or article.title }}
+            </a>
+          </p>
+          {% if article.translated_title and article.translated_title != article.title %}
+          <p style="margin:0 0 12px; font-size:12px; color:#bbb; font-style:italic;">{{ article.title }}</p>
+          {% endif %}
+
+          {% set body = article.summary or article.excerpt %}
+          {% if body %}
+          <p style="margin:12px 0 18px; font-size:14px; color:#444; line-height:1.75;">{{ body }}</p>
+          {% endif %}
+
+          <a href="{{ article.url }}" target="_blank" rel="noopener"
+             style="display:inline-block; background:{{ primary_color }}; color:#ffffff; font-size:12px; font-weight:600; padding:9px 20px; border-radius:7px;">
+            Read article &rarr;
+          </a>
+        </div>
       </div>
-      <div style="margin-bottom:7px;">
-        <a href="{{ article.url }}" target="_blank" rel="noopener"
-           style="font-size:15px;font-weight:600;line-height:1.4;color:#111;text-decoration:none;">
-          {{ article.translated_title or article.title }}
-        </a>
-        {% if article.translated_title and article.translated_title != article.title %}
-        <div style="margin-top:3px;font-size:12px;color:#aaa;font-style:italic;">{{ article.title }}</div>
-        {% endif %}
-      </div>
-      {% set display_text = article.summary or article.excerpt %}
-      {% if display_text %}
-      <p style="margin:0 0 10px;font-size:13px;color:#555;line-height:1.65;">
-        {{ display_text[:340] }}{% if display_text|length > 340 %}…{% endif %}
+      {% endfor %}
+    {% endif %}
+
+    <!-- Truncation notice -->
+    {% if total_pending and total_pending > articles|length %}
+    <div class="padded" style="padding:12px 32px; background:#fffbeb; border-top:1px solid #fde68a;">
+      <p style="margin:0; font-size:12px; color:#92400e;">
+        Showing top {{ articles|length }} articles (limited per category) &mdash; all {{ total_pending }} pending articles have been archived.
       </p>
-      {% endif %}
-      <a href="{{ article.url }}" target="_blank" rel="noopener"
-         style="font-size:12px;font-weight:600;color:{{ primary_color }};text-decoration:none;">
-        Read article →
-      </a>
     </div>
-    {% endfor %}
-  {% endif %}
+    {% endif %}
 
-  <!-- Truncation notice -->
-  {% if total_pending and total_pending > articles|length %}
-  <div style="background:#fffbea;padding:10px 28px;border-left:3px solid #f59e0b;border-top:1px solid #fef3c7;">
-    <span style="font-size:12px;color:#92400e;">
-      Showing top {{ articles|length }} articles (limited per category). All {{ total_pending }} articles have been archived.
-    </span>
-  </div>
-  {% endif %}
+    <!-- Footer -->
+    <div class="padded" style="padding:20px 32px; background:#f8f9fb; border-top:1px solid #ececec; text-align:center;">
+      <p style="margin:0; font-size:11px; color:#c0c4cc; line-height:1.7;">
+        Curated by <strong style="color:#aaa;">{{ from_name }}</strong> &nbsp;&middot;&nbsp; Powered by NewsRobot
+      </p>
+    </div>
 
-  <!-- Footer -->
-  <div style="background:#f8f9fa;border-radius:0 0 10px 10px;padding:18px 28px;text-align:center;border-top:1px solid #eee;">
-    <p style="margin:0;font-size:11px;color:#aaa;line-height:1.7;">
-      Sent to you by <strong style="color:#888;">{{ from_name }}</strong> via NewsRobot<br>
-    </p>
-  </div>
-
-</div>
+  </div><!-- /card -->
+</div><!-- /max-width -->
+</div><!-- /outer -->
 </body>
 </html>
