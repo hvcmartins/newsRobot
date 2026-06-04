@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { formatDistanceToNow, differenceInSeconds } from 'date-fns'
 import type { ScrapeRun } from '@/api/types'
 import Badge from '@/components/ui/Badge'
+import { parseUTC } from '@/utils/dates'
 
 const statusVariant = (s: ScrapeRun['status']) =>
   s === 'success' ? 'success' : s === 'error' ? 'error' : s === 'running' ? 'info' : 'warning'
@@ -28,7 +29,7 @@ export default function RunHistoryTable({ runs }: Props) {
         <tbody>
           {runs.map((r) => {
             const dur = r.completed_at
-              ? differenceInSeconds(new Date(r.completed_at), new Date(r.started_at))
+              ? differenceInSeconds(parseUTC(r.completed_at), parseUTC(r.started_at))
               : null
             return (
               <React.Fragment key={r.id}>

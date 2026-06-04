@@ -3,6 +3,7 @@ import { useQueryClient, useMutation } from '@tanstack/react-query'
 import { sourceApi } from '@/api/sources'
 import type { Source } from '@/api/types'
 import type { SourceCheckResult } from '@/api/sources'
+import { parseUTC } from '@/utils/dates'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import SourceForm from './SourceForm'
@@ -112,7 +113,7 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
                   <Badge variant={s.type === 'rss' ? 'info' : 'neutral'}>{s.type.toUpperCase()}</Badge>
                 </td>
                 <td style={{ padding: '12px 14px', fontSize: 12, color: '#999' }}>
-                  {s.last_scraped_at ? formatDistanceToNow(new Date(s.last_scraped_at), { addSuffix: true }) : 'Never'}
+                  {s.last_scraped_at ? formatDistanceToNow(parseUTC(s.last_scraped_at), { addSuffix: true }) : 'Never'}
                 </td>
                 <td style={{ padding: '12px 14px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

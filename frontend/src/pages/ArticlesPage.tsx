@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
+import { parseUTC } from '@/utils/dates'
 import { useTenant } from '@/contexts/TenantContext'
 import { articleApi } from '@/api/articles'
 import { sourceApi } from '@/api/sources'
@@ -59,7 +60,7 @@ export default function ArticlesPage() {
 
   const scrapePaused = activeTenant?.scrape_paused ?? false
   const nextSend = dashboard?.next_send_at
-    ? formatDistanceToNow(new Date(dashboard.next_send_at), { addSuffix: true })
+    ? formatDistanceToNow(parseUTC(dashboard.next_send_at), { addSuffix: true })
     : null
 
   return (

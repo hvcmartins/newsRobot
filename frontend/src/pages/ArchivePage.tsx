@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format, formatDistanceToNow } from 'date-fns'
+import { parseUTC } from '@/utils/dates'
 import { useTenant } from '@/contexts/TenantContext'
 import { articleApi } from '@/api/articles'
 import { sourceApi } from '@/api/sources'
@@ -78,7 +79,7 @@ function ArchivedArticleRow({ article }: { article: Article }) {
         )}
       </div>
       <span style={{ fontSize: 11, color: '#bbb', flexShrink: 0, whiteSpace: 'nowrap' }}>
-        {formatDistanceToNow(new Date(date), { addSuffix: true })}
+        {formatDistanceToNow(parseUTC(date), { addSuffix: true })}
       </span>
     </div>
   )
@@ -170,7 +171,7 @@ export default function ArchivePage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--brand-color)', flexShrink: 0 }} />
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>
-                  Digest sent {format(new Date(group.date), 'PPP')}
+                  Digest sent {format(parseUTC(group.date), 'PPP')}
                 </span>
                 <span style={{
                   fontSize: 11, background: '#f0f4ff', color: '#3a5fbb',

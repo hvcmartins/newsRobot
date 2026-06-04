@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, format } from 'date-fns'
+import { parseUTC } from '@/utils/dates'
 import { useTenant } from '@/contexts/TenantContext'
 import { articleApi } from '@/api/articles'
 import { sourceApi } from '@/api/sources'
@@ -153,12 +154,16 @@ export default function DashboardPage() {
 
   const enrichRate = data?.enrichment_rate != null ? `${data.enrichment_rate}%` : '—'
   const lastDigestLabel = data?.last_digest_at
-    ? formatDistanceToNow(new Date(data.last_digest_at), { addSuffix: true })
+    ? formatDistanceToNow(parseUTC(data.last_digest_at), { addSuffix: true })
     : 'Never'
   const nextSendLabel = data?.next_send_at
-    ? formatDistanceToNow(new Date(data.next_send_at), { addSuffix: true })
+    ? formatDistanceToNow(parseUTC(data.next_send_at), { addSuffix: true })
     : 'Not scheduled'
-  const nextSendFull = data?.next_send_at ? format(new Date(data.next_send_at), 'PPpp') : null
+  const nextSendFull = data?.next_send_at ? format(parseUTC(data.next_send_at), 'PPpp') : null
+  const nextScrapeLabel = data?.next_scrape_at
+    ? formatDistanceToNow(parseUTC(data.next_scrape_at), { addSuffix: true })
+    : null
+  const nextScrapeFull = data?.next_scrape_at ? format(parseUTC(data.next_scrape_at), 'PPpp') : null
   const runsTotal = (data?.recent_runs_ok ?? 0) + (data?.recent_runs_error ?? 0)
   const healthColor = (data?.recent_runs_error ?? 0) === 0 ? '#2e7d32'
     : (data?.recent_runs_ok ?? 0) === 0 ? '#c62828' : '#e65100'
@@ -261,6 +266,16 @@ export default function DashboardPage() {
               No new articles will be fetched until scraping is resumed.
             </p>
           )}
+
+          {nextScrapeLabel && !scrapeRunning && (
+            <p style={{ fontSize: 12, color: '#888', margin: 0 }}>
+              <span style={{ fontWeight: 600, color: '#555' }}>Next scrape:</span>{' '}
+              <span title={nextScrapeFull ?? undefined}>{nextScrapeLabel}</span>
+              {nextScrapeFull && (
+                <span style={{ fontSize: 11, color: '#bbb', marginLeft: 6 }}>({nextScrapeFull})</span>
+              )}
+            </p>
+          )}
         </div>
 
         {/* Enrichment panel */}
@@ -341,7 +356,7 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <span style={{ fontSize: 12, color: '#999', minWidth: 80 }}>Sent</span>
-              <span style={{ fontSize: 12, color: '#333' }}>{format(new Date(data.last_digest_at), 'PPpp')}</span>
+              <span style={{ fontSize: 12, color: '#333' }}>{format(parseUTC(data.last_digest_at), 'PPpp')}</span>
             </div>
             {data.last_digest_subject && (
               <div style={{ display: 'flex', gap: 8 }}>

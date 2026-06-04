@@ -104,6 +104,7 @@ export interface DashboardStats {
   last_digest_at: string | null
   last_digest_subject: string | null
   next_send_at: string | null
+  next_scrape_at: string | null
   recent_runs_ok: number
   recent_runs_error: number
 }

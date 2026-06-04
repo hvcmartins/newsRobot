@@ -206,6 +206,15 @@ def dashboard(tenant_id: int, db: Session = Depends(get_db)):
     runs_ok = sum(1 for r in recent_runs if r.status == RunStatus.success)
     runs_error = sum(1 for r in recent_runs if r.status == RunStatus.error)
 
+    next_scrape = None
+    try:
+        from app.services.scheduler import scheduler
+        job = scheduler.get_job(f"scrape_{tenant_id}")
+        if job and job.next_run_time:
+            next_scrape = job.next_run_time.isoformat()
+    except Exception:
+        pass
+
     return {
         "scraped_today": scraped_today,
         "pending_count": pending_count,
@@ -213,6 +222,7 @@ def dashboard(tenant_id: int, db: Session = Depends(get_db)):
         "last_digest_at": last_digest.sent_at.replace(tzinfo=datetime.timezone.utc).isoformat() if last_digest else None,
         "last_digest_subject": last_digest.subject if last_digest else None,
         "next_send_at": next_send,
+        "next_scrape_at": next_scrape,
         "recent_runs_ok": runs_ok,
         "recent_runs_error": runs_error,
     }

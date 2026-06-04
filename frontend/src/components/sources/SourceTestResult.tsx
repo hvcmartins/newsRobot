@@ -1,6 +1,7 @@
 import React from 'react'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
+import { parseUTC } from '@/utils/dates'
 
 interface SampleArticle {
   title: string
@@ -47,7 +48,7 @@ export default function SourceTestResult({ data, onClose }: Props) {
                 {a.title}
               </a>
               {a.excerpt && <p style={{ fontSize: 12, color: '#666', marginTop: 4, lineHeight: 1.5 }}>{a.excerpt.slice(0, 200)}…</p>}
-              {a.published_at && <p style={{ fontSize: 11, color: '#aaa', marginTop: 6 }}>{new Date(a.published_at).toLocaleString()}</p>}
+              {a.published_at && <p style={{ fontSize: 11, color: '#aaa', marginTop: 6 }}>{parseUTC(a.published_at).toLocaleString()}</p>}
             </div>
           ))}
         </div>

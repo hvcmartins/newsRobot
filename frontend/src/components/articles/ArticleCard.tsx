@@ -2,6 +2,7 @@ import React from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import type { Article } from '@/api/types'
 import Badge from '@/components/ui/Badge'
+import { parseUTC } from '@/utils/dates'
 
 interface Props {
   article: Article
@@ -119,7 +120,7 @@ export default function ArticleCard({ article, onMarkRead, onReEnrich }: Props) 
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', gap: 8 }}>
           <span style={{ fontSize: 11, color: '#aaa' }}>
-            {formatDistanceToNow(new Date(date), { addSuffix: true })}
+            {formatDistanceToNow(parseUTC(date), { addSuffix: true })}
             {article.ai_enriched && <span style={{ marginLeft: 8, color: '#9c27b0' }}>✦ AI</span>}
           </span>
           {onReEnrich && (
