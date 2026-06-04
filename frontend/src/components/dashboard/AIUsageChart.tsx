@@ -64,22 +64,24 @@ function BarChartPanel({ title, todayLabel, buckets, getValue, barColor, view }:
   const displayVal = hovered !== null ? fmtNumber(values[hovered]) : todayLabel
   const displaySub = hovered !== null
     ? fmtBucketLabel(buckets[hovered].ts, view)
-    : 'today'
+    : VIEW_LABELS[view].toLowerCase()
 
   return (
     <div style={{
-      background: '#111213', borderRadius: 10,
+      background: '#fff', borderRadius: 10,
+      border: '1px solid #eee',
       padding: '16px 18px 10px',
       display: 'flex', flexDirection: 'column', gap: 0,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
     }}>
       {/* Panel header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#e0e0e0' }}>{title}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#333' }}>{title}</span>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 22, fontWeight: 700, color: barColor, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
             {displayVal}
           </div>
-          <div style={{ fontSize: 10, color: '#555', marginTop: 3, letterSpacing: '0.3px' }}>
+          <div style={{ fontSize: 10, color: '#aaa', marginTop: 3, letterSpacing: '0.3px' }}>
             {displaySub}
           </div>
         </div>
@@ -98,11 +100,11 @@ function BarChartPanel({ title, todayLabel, buckets, getValue, barColor, view }:
             <g key={ti}>
               <line
                 x1={Y_AXIS_W} x2={SVG_W - 6} y1={y} y2={y}
-                stroke="rgba(255,255,255,0.04)" strokeWidth={1}
+                stroke="rgba(0,0,0,0.05)" strokeWidth={1}
               />
               <text
                 x={Y_AXIS_W - 5} y={y + 3.5}
-                textAnchor="end" fill="#3a3a3a" fontSize={9}
+                textAnchor="end" fill="#bbb" fontSize={9}
                 fontFamily="ui-monospace,monospace"
               >
                 {fmtNumber(tick)}
@@ -127,7 +129,7 @@ function BarChartPanel({ title, todayLabel, buckets, getValue, barColor, view }:
               key={i}
               x={x} y={CHART_H - barH}
               width={barW} height={barH}
-              fill={hovered === i ? '#ffffff' : barColor}
+              fill={hovered === i ? '#333' : barColor}
               rx={1}
               onMouseEnter={() => setHovered(i)}
               style={{ cursor: 'crosshair' }}
@@ -150,7 +152,7 @@ function BarChartPanel({ title, todayLabel, buckets, getValue, barColor, view }:
         {buckets.length > 1 && <>
           <text
             x={Y_AXIS_W} y={CHART_H + BOTTOM_H - 3}
-            fill="#3a3a3a" fontSize={9} fontFamily="ui-monospace,monospace"
+            fill="#bbb" fontSize={9} fontFamily="ui-monospace,monospace"
           >
             {fmtBucketLabel(buckets[0].ts, view)}
           </text>
@@ -182,9 +184,23 @@ export default function AIUsageChart({ tenantId }: Props) {
   })
 
   const buckets = data?.buckets ?? []
+
+  // Aggregate totals for the selected view window (what the charts show)
+  const periodCalls = buckets.reduce((s, b) => s + b.calls, 0)
+  const periodTokensIn = buckets.reduce((s, b) => s + b.tokens_in, 0)
+  const periodTokensOut = buckets.reduce((s, b) => s + b.tokens_out, 0)
+  const periodTokens = periodTokensIn + periodTokensOut
+
+  // For "last hour" view use the in-memory today count; for wider views use bucket sum
   const today = data?.today ?? { calls: 0, tokens_in: 0, tokens_out: 0 }
-  const todayCalls = Math.max(data?.today_db_calls ?? 0, today.calls)
-  const todayTokens = today.tokens_in + today.tokens_out
+  const displayCalls = view === 'minute'
+    ? Math.max(data?.today_db_calls ?? 0, today.calls)
+    : periodCalls
+  const displayTokensIn = view === 'minute' ? today.tokens_in : periodTokensIn
+  const displayTokensOut = view === 'minute' ? today.tokens_out : periodTokensOut
+  const displayTokens = displayTokensIn + displayTokensOut
+
+  const periodLabel = VIEW_LABELS[view].toLowerCase()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -216,9 +232,10 @@ export default function AIUsageChart({ tenantId }: Props) {
       {isLoading ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {[0, 1].map(i => (
-            <div key={i} style={{ background: '#111213', borderRadius: 10, height: 160,
-              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 12, color: '#333' }}>Loading…</span>
+            <div key={i} style={{ background: '#fff', border: '1px solid #eee', borderRadius: 10, height: 160,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}>
+              <span style={{ fontSize: 12, color: '#ccc' }}>Loading…</span>
             </div>
           ))}
         </div>
@@ -226,7 +243,7 @@ export default function AIUsageChart({ tenantId }: Props) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <BarChartPanel
             title="API Calls"
-            todayLabel={todayCalls.toLocaleString()}
+            todayLabel={displayCalls.toLocaleString()}
             buckets={buckets}
             getValue={b => b.calls}
             barColor="#4ade80"
@@ -234,7 +251,7 @@ export default function AIUsageChart({ tenantId }: Props) {
           />
           <BarChartPanel
             title="Tokens"
-            todayLabel={fmtNumber(todayTokens)}
+            todayLabel={fmtNumber(displayTokens)}
             buckets={buckets}
             getValue={b => b.tokens_in + b.tokens_out}
             barColor="#a78bfa"
@@ -243,23 +260,23 @@ export default function AIUsageChart({ tenantId }: Props) {
         </div>
       )}
 
-      {/* Today detail row */}
+      {/* Period summary counters */}
       {!isLoading && (
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', paddingLeft: 2 }}>
-          <TodayCounter label="Calls today" value={todayCalls.toLocaleString()} color="#4ade80" />
-          <TodayCounter label="Tokens in" value={fmtNumber(today.tokens_in)} color="#60a5fa" />
-          <TodayCounter label="Tokens out" value={fmtNumber(today.tokens_out)} color="#a78bfa" />
-          <TodayCounter label="Total tokens" value={fmtNumber(todayTokens)} color="#f0f0f0" />
+          <PeriodCounter label={`Calls · ${periodLabel}`} value={displayCalls.toLocaleString()} color="#22c55e" />
+          <PeriodCounter label="Tokens in" value={fmtNumber(displayTokensIn)} color="#3b82f6" />
+          <PeriodCounter label="Tokens out" value={fmtNumber(displayTokensOut)} color="#a855f7" />
+          <PeriodCounter label="Total tokens" value={fmtNumber(displayTokens)} color="#555" />
         </div>
       )}
     </div>
   )
 }
 
-function TodayCounter({ label, value, color }: { label: string; value: string; color: string }) {
+function PeriodCounter({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#888' }}>
+      <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#aaa' }}>
         {label}
       </span>
       <span style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
