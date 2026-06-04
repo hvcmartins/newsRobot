@@ -37,7 +37,8 @@ class ClaudeProvider(AIProvider):
                                  "cache_control": {"type": "ephemeral"}}]
         t0 = time.monotonic()
         msg = self._client.messages.create(**kwargs)
-        record_tokens(msg.usage.output_tokens, time.monotonic() - t0)
+        record_tokens(msg.usage.output_tokens, time.monotonic() - t0,
+                      input_tokens=msg.usage.input_tokens)
         return msg.content[0].text.strip()
 
     def _ask_array(self, prompt: str, system: str | None = None) -> list:

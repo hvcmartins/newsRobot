@@ -72,7 +72,8 @@ class OpenAIProvider(AIProvider):
             **({"extra_body": self._extra_body} if self._extra_body else {}),
         )
         if resp.usage:
-            record_tokens(resp.usage.completion_tokens, time.monotonic() - t0)
+            record_tokens(resp.usage.completion_tokens, time.monotonic() - t0,
+                          input_tokens=resp.usage.prompt_tokens or 0)
         msg = resp.choices[0].message
         content = msg.content or ""
         if not content:

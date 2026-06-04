@@ -63,7 +63,8 @@ class LlamaCppProvider(AIProvider):
             )
         usage = resp.get("usage", {})
         if usage.get("completion_tokens"):
-            record_tokens(usage["completion_tokens"], time.monotonic() - t0)
+            record_tokens(usage["completion_tokens"], time.monotonic() - t0,
+                          input_tokens=usage.get("prompt_tokens", 0))
         # Strip <think>…</think> blocks (Qwen3, DeepSeek-R1, etc.)
         return strip_thinking(resp["choices"][0]["message"]["content"].strip())
 

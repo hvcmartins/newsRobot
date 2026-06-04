@@ -9,6 +9,7 @@ import { tenantApi } from '@/api/tenants'
 import { scrapeRunApi } from '@/api/scrapeRuns'
 import Button from '@/components/ui/Button'
 import Spinner from '@/components/ui/Spinner'
+import AIUsageChart from '@/components/dashboard/AIUsageChart'
 
 function StatCard({
   label, value, sub, color = '#333',
@@ -348,6 +349,11 @@ export default function DashboardPage() {
           Check <a href="/run-history" style={{ color: 'inherit', fontWeight: 600 }}>Run History</a> for details.
         </div>
       )}
+
+      {/* AI Usage graph */}
+      <div style={{ background: '#fff', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.07)' }}>
+        <AIUsageChart tenantId={tenantId} />
+      </div>
 
       {/* Last digest */}
       {data?.last_digest_at && (

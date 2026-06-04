@@ -45,7 +45,8 @@ class OllamaProvider(AIProvider):
         data = resp.json()
         usage = data.get("usage", {})
         if usage.get("completion_tokens"):
-            self._record_tokens(usage["completion_tokens"], time.monotonic() - t0)
+            self._record_tokens(usage["completion_tokens"], time.monotonic() - t0,
+                                usage.get("prompt_tokens", 0))
         return strip_thinking(data["choices"][0]["message"]["content"].strip())
 
     def _ask_array(self, prompt: str, system: str | None = None) -> list:
