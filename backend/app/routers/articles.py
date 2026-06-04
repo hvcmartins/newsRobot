@@ -22,7 +22,7 @@ def list_articles(
     is_read: Optional[bool] = None,
     archived: Optional[bool] = None,   # None/False = pending queue; True = archive
     page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+    size: int = Query(20, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
     q = (db.query(Article)
@@ -194,7 +194,7 @@ def dashboard(tenant_id: int, db: Session = Depends(get_db)):
             candidate = now.replace(hour=h, minute=m, second=0, microsecond=0)
             if candidate <= now:
                 candidate += datetime.timedelta(days=1)
-            next_send = candidate.isoformat()
+            next_send = candidate.replace(tzinfo=datetime.timezone.utc).isoformat()
         except Exception:
             pass
 
@@ -210,7 +210,7 @@ def dashboard(tenant_id: int, db: Session = Depends(get_db)):
         "scraped_today": scraped_today,
         "pending_count": pending_count,
         "enrichment_rate": enrichment_rate,
-        "last_digest_at": last_digest.sent_at.isoformat() if last_digest else None,
+        "last_digest_at": last_digest.sent_at.replace(tzinfo=datetime.timezone.utc).isoformat() if last_digest else None,
         "last_digest_subject": last_digest.subject if last_digest else None,
         "next_send_at": next_send,
         "recent_runs_ok": runs_ok,

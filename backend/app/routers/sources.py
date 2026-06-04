@@ -1,3 +1,4 @@
+import datetime
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 from typing import Optional
@@ -175,7 +176,7 @@ def test_source(source_id: int, db: Session = Depends(get_db)):
                     "title": a.title,
                     "url": a.url,
                     "excerpt": a.excerpt,
-                    "published_at": a.published_at.isoformat() if a.published_at else None,
+                    "published_at": a.published_at.replace(tzinfo=datetime.timezone.utc).isoformat() if a.published_at else None,
                     "image_url": a.image_url,
                 }
                 for a in articles

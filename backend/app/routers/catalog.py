@@ -225,7 +225,7 @@ def discover_sources(tenant_id: int, background_tasks: BackgroundTasks,
     job_id = uuid.uuid4().hex[:12]
     _discovery_jobs[job_id] = {
         "status": "running",
-        "started_at": _dt.datetime.utcnow().isoformat(),
+        "started_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
     }
 
     # Evict oldest jobs beyond the cap
