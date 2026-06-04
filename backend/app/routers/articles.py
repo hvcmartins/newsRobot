@@ -172,9 +172,10 @@ def dashboard(tenant_id: int, db: Session = Depends(get_db)):
     recent_enriched = (db.query(Article)
                        .filter(Article.tenant_id == tenant_id,
                                Article.scraped_at >= week_ago,
+                               Article.duplicate_of_id.is_(None),
                                Article.ai_enriched == True)
                        .count())
-    enrichment_rate = (round(recent_enriched / recent_total * 100)
+    enrichment_rate = (min(100, round(recent_enriched / recent_total * 100))
                        if recent_total else None)
 
     last_digest = (db.query(SentDigest)
