@@ -27,6 +27,8 @@ export const articleApi = {
     client.delete('/api/articles/', { params: { tenant_id: tenantId } }).then((r) => r.data),
   reEnrich: (id: number) =>
     client.post<{ queued: boolean }>(`/api/articles/${id}/re-enrich`).then((r) => r.data),
+  fetchImage: (id: number) =>
+    client.post<{ image_url: string | null }>(`/api/articles/${id}/fetch-image`).then((r) => r.data),
   enrichmentStatus: (tenantId: number) =>
     client.get<{ total: number; enriched: number; pending: number; paused: boolean; tokens_per_second: number | null; seconds_per_article: number | null }>(
       '/api/articles/enrichment-status', { params: { tenant_id: tenantId } }

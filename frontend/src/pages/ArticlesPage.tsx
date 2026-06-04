@@ -62,6 +62,11 @@ export default function ArticlesPage() {
     },
   })
 
+  const fetchImageMut = useMutation({
+    mutationFn: (id: number) => articleApi.fetchImage(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['articles', tenantId] }),
+  })
+
   const handleFilterChange = useCallback((f: Filters) => setFilters(f), [])
 
   if (!activeTenant) {
@@ -107,6 +112,7 @@ export default function ArticlesPage() {
         total={data?.total ?? 0}
         onMarkRead={(id) => markReadMut.mutate(id)}
         onReEnrich={(id) => reEnrichSingleMut.mutate(id)}
+        onFetchImage={(id) => fetchImageMut.mutate(id)}
       />
     </div>
   )

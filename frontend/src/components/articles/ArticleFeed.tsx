@@ -10,6 +10,7 @@ interface Props {
   total: number
   onMarkRead: (id: number) => void
   onReEnrich?: (id: number) => void
+  onFetchImage?: (id: number) => void
   categoryOrder?: string[]
 }
 
@@ -39,7 +40,7 @@ const grid: React.CSSProperties = {
 }
 
 export default function ArticleFeed({
-  articles, isLoading, onMarkRead, onReEnrich, categoryOrder = [],
+  articles, isLoading, onMarkRead, onReEnrich, onFetchImage, categoryOrder = [],
 }: Props) {
   if (isLoading) {
     return (
@@ -88,7 +89,7 @@ export default function ArticleFeed({
             )}
             <div style={grid}>
               {catArticles.map(a => (
-                <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} />
+                <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} onFetchImage={onFetchImage} />
               ))}
             </div>
           </div>
@@ -100,7 +101,7 @@ export default function ArticleFeed({
   return (
     <div style={{ ...grid, marginBottom: 24 }}>
       {articles.map(a => (
-        <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} />
+        <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} onFetchImage={onFetchImage} />
       ))}
     </div>
   )

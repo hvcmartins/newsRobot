@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import type { Article } from '@/api/types'
 import Badge from '@/components/ui/Badge'
@@ -8,6 +8,7 @@ interface Props {
   article: Article
   onMarkRead?: (id: number) => void
   onReEnrich?: (id: number) => void
+  onFetchImage?: (id: number) => void
 }
 
 function relevanceStyle(score: number, aiEnriched: boolean): {
@@ -32,7 +33,8 @@ function relevanceStyle(score: number, aiEnriched: boolean): {
   }
 }
 
-export default function ArticleCard({ article, onMarkRead, onReEnrich }: Props) {
+export default function ArticleCard({ article, onMarkRead, onReEnrich, onFetchImage }: Props) {
+  const [fetchingImg, setFetchingImg] = useState(false)
   const displayText = article.summary || article.excerpt
   const date = article.published_at || article.scraped_at
   const rel = relevanceStyle(article.relevance_score, article.ai_enriched)
@@ -51,7 +53,7 @@ export default function ArticleCard({ article, onMarkRead, onReEnrich }: Props) 
         borderLeft: rel ? `3px solid ${rel.borderColor}` : '3px solid transparent',
       }}
     >
-      {article.image_url && (
+      {article.image_url ? (
         <a href={article.url} target="_blank" rel="noopener noreferrer">
           <img
             src={article.image_url}
@@ -61,6 +63,24 @@ export default function ArticleCard({ article, onMarkRead, onReEnrich }: Props) 
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
         </a>
+      ) : onFetchImage && (
+        <button
+          onClick={(e) => {
+            e.preventDefault()
+            setFetchingImg(true)
+            onFetchImage(article.id)
+          }}
+          disabled={fetchingImg}
+          style={{
+            width: '100%', height: 60, background: '#f8f8f8',
+            border: 'none', borderBottom: '1px solid #f0f0f0',
+            cursor: fetchingImg ? 'default' : 'pointer',
+            color: '#bbb', fontSize: 11, fontWeight: 600,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+          }}
+        >
+          {fetchingImg ? '…' : '🖼 Fetch image'}
+        </button>
       )}
 
       <div style={{ padding: '14px 16px', flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>

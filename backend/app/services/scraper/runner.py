@@ -175,6 +175,14 @@ def _enrich_article(article_id: int, topic_profile: str | None,
         article.category = result.category
         ai_log.info("Enriched '%s' → %s", title_short, result.category or "—")
 
+        # Backfill missing image via og:image
+        if not article.image_url and article.url:
+            from app.services.scraper.base import fetch_og_image
+            img = fetch_og_image(article.url)
+            if img:
+                article.image_url = img
+                ai_log.debug("og:image found for '%s': %s", title_short, img)
+
         article.ai_enriched = True
         db.commit()
         record_article(time.monotonic() - t_article_start)

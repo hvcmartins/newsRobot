@@ -307,6 +307,22 @@ def re_enrich_article(article_id: int, db: Session = Depends(get_db)):
     return {"queued": True}
 
 
+@router.post("/{article_id}/fetch-image")
+def fetch_article_image(article_id: int, db: Session = Depends(get_db)):
+    """Fetch og:image for an article that has no image yet."""
+    article = db.get(Article, article_id)
+    if not article:
+        raise HTTPException(404, "Article not found")
+    from app.services.scraper.base import fetch_og_image
+    img = fetch_og_image(article.url)
+    if img:
+        article.image_url = img
+        db.commit()
+        db.refresh(article)
+        return {"image_url": img}
+    return {"image_url": None}
+
+
 @router.delete("/{article_id}", status_code=204)
 def delete_article(article_id: int, db: Session = Depends(get_db)):
     article = db.get(Article, article_id)
