@@ -175,9 +175,16 @@ def _enrich_article(article_id: int, topic_profile: str | None,
         article.category = result.category
         ai_log.info("Enriched '%s' → %s", title_short, result.category or "—")
 
+        # Resolve Google News redirect URLs to the real article URL
+        from app.services.scraper.base import fetch_og_image, resolve_article_url
+        if article.url and "news.google.com" in article.url:
+            real_url = resolve_article_url(article.url)
+            if real_url != article.url:
+                ai_log.debug("Resolved Google News URL for '%s': %s", title_short, real_url)
+                article.url = real_url
+
         # Backfill missing image via og:image
         if not article.image_url and article.url:
-            from app.services.scraper.base import fetch_og_image
             img = fetch_og_image(article.url)
             if img:
                 article.image_url = img

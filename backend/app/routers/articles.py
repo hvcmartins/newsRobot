@@ -325,15 +325,24 @@ def fetch_missing_images(tenant_id: int, db: Session = Depends(get_db)):
         return {"queued": 0}
 
     def _fetch_one(article_id: int, url: str) -> None:
-        img = fetch_og_image(url)
-        if not img:
+        from app.services.scraper.base import resolve_article_url
+        real_url = resolve_article_url(url)
+        img = fetch_og_image(real_url)
+        if not img and real_url == url:
             return
         s = SessionLocal()
         try:
             a = s.get(Article, article_id)
-            if a and not a.image_url:
-                a.image_url = img
-                s.commit()
+            if a:
+                changed = False
+                if real_url != url:
+                    a.url = real_url
+                    changed = True
+                if img and not a.image_url:
+                    a.image_url = img
+                    changed = True
+                if changed:
+                    s.commit()
         finally:
             s.close()
 
@@ -351,14 +360,17 @@ def fetch_article_image(article_id: int, db: Session = Depends(get_db)):
     article = db.get(Article, article_id)
     if not article:
         raise HTTPException(404, "Article not found")
-    from app.services.scraper.base import fetch_og_image
-    img = fetch_og_image(article.url)
+    from app.services.scraper.base import fetch_og_image, resolve_article_url
+    real_url = resolve_article_url(article.url)
+    if real_url != article.url:
+        article.url = real_url
+    img = fetch_og_image(real_url)
     if img:
         article.image_url = img
+    if img or real_url != article.url:
         db.commit()
         db.refresh(article)
-        return {"image_url": img}
-    return {"image_url": None}
+    return {"image_url": img}
 
 
 @router.delete("/{article_id}", status_code=204)
