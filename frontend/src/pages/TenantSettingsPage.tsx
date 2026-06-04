@@ -32,6 +32,9 @@ export default function TenantSettingsPage() {
   const [saved, setSaved] = useState(false)
   const [suggestingKw, setSuggestingKw] = useState(false)
   const [suggestingCats, setSuggestingCats] = useState(false)
+  const [editingCatIdx, setEditingCatIdx] = useState<number | null>(null)
+  const [editCatValue, setEditCatValue] = useState('')
+  const [addCatValue, setAddCatValue] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [addingTenant, setAddingTenant] = useState(false)
   const [newTenant, setNewTenant] = useState({ name: '', slug: '', primary_color: '#0066cc' })
@@ -77,6 +80,7 @@ export default function TenantSettingsPage() {
         max_article_age_days: form.max_article_age_days ?? null,
         accepted_languages: form.accepted_languages ?? null,
         translation_language: form.translation_language ?? null,
+        ai_categories: form.ai_categories ?? null,
       })
     },
     onSuccess: () => {
@@ -146,6 +150,36 @@ export default function TenantSettingsPage() {
   const categories: string[] = (() => {
     try { return JSON.parse(form.ai_categories ?? '[]') } catch { return [] }
   })()
+
+  const setCategories = (cats: string[]) =>
+    set({ ai_categories: cats.length ? JSON.stringify(cats) : null })
+
+  const addCategory = (val: string) => {
+    const trimmed = val.trim()
+    if (!trimmed || categories.includes(trimmed)) return
+    setCategories([...categories, trimmed])
+    setAddCatValue('')
+  }
+
+  const removeCategory = (idx: number) =>
+    setCategories(categories.filter((_, i) => i !== idx))
+
+  const startEditCat = (idx: number) => {
+    setEditingCatIdx(idx)
+    setEditCatValue(categories[idx])
+  }
+
+  const commitEditCat = () => {
+    if (editingCatIdx === null) return
+    const trimmed = editCatValue.trim()
+    if (trimmed && !categories.some((c, i) => c === trimmed && i !== editingCatIdx)) {
+      const next = [...categories]
+      next[editingCatIdx] = trimmed
+      setCategories(next)
+    }
+    setEditingCatIdx(null)
+    setEditCatValue('')
+  }
 
   const suggestCategories = async () => {
     if (!activeTenant) return
@@ -290,18 +324,88 @@ export default function TenantSettingsPage() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Article Categories (derived from your profile)</label>
-          {categories.length > 0 ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {categories.map(c => (
-                <span key={c} style={{ background: '#f0f4ff', border: '1px solid #c7d8fb', borderRadius: 12, padding: '3px 10px', fontSize: 12, color: '#3a5fbb' }}>
-                  {c}
+          <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Article Categories</label>
+          {/* Interactive tag editor */}
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center',
+            padding: '7px 10px', border: '1px solid #ddd', borderRadius: 8,
+            background: '#fafafa', minHeight: 44, cursor: 'text',
+          }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                (e.currentTarget.querySelector('input[placeholder]') as HTMLInputElement)?.focus()
+              }
+            }}
+          >
+            {categories.map((c, i) =>
+              editingCatIdx === i ? (
+                <input
+                  key={i}
+                  autoFocus
+                  value={editCatValue}
+                  onChange={(e) => setEditCatValue(e.target.value)}
+                  onBlur={commitEditCat}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); commitEditCat() }
+                    if (e.key === 'Escape') { setEditingCatIdx(null); setEditCatValue('') }
+                  }}
+                  style={{
+                    border: '1px solid var(--brand-color)', borderRadius: 12,
+                    padding: '3px 8px', fontSize: 12, outline: 'none', color: '#3a5fbb',
+                    width: Math.max(80, editCatValue.length * 8 + 16),
+                    background: '#fff',
+                  }}
+                />
+              ) : (
+                <span
+                  key={c}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    background: '#f0f4ff', border: '1px solid #c7d8fb',
+                    borderRadius: 12, padding: '3px 6px 3px 10px',
+                    fontSize: 12, color: '#3a5fbb', userSelect: 'none',
+                  }}
+                >
+                  <span
+                    onClick={() => startEditCat(i)}
+                    style={{ cursor: 'text' }}
+                    title="Click to rename"
+                  >{c}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeCategory(i) }}
+                    title="Remove"
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '0 2px', lineHeight: 1, color: '#93b4f0',
+                      fontSize: 15, display: 'flex', alignItems: 'center',
+                    }}
+                  >×</button>
                 </span>
-              ))}
-            </div>
-          ) : (
-            <p style={{ fontSize: 12, color: '#aaa', margin: 0 }}>No categories yet — generate them from your profile below.</p>
-          )}
+              )
+            )}
+            <input
+              value={addCatValue}
+              onChange={(e) => setAddCatValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ',') {
+                  e.preventDefault()
+                  addCategory(addCatValue)
+                }
+                if (e.key === 'Backspace' && !addCatValue && categories.length > 0) {
+                  removeCategory(categories.length - 1)
+                }
+              }}
+              onBlur={() => { if (addCatValue.trim()) addCategory(addCatValue) }}
+              placeholder={categories.length === 0 ? 'Add a category and press Enter…' : 'Add…'}
+              style={{
+                border: 'none', background: 'transparent', fontSize: 12,
+                color: '#555', outline: 'none', minWidth: 120, flex: 1, padding: '3px 4px',
+              }}
+            />
+          </div>
+          <p style={{ fontSize: 11, color: '#aaa', margin: 0 }}>
+            Click a tag to rename · × to remove · Enter or comma to add · Backspace on empty input removes last
+          </p>
           <Button variant="secondary" size="sm" loading={suggestingCats} onClick={suggestCategories}
             disabled={!form.topic_profile?.trim()}>
             ✦ Generate Categories from Profile
