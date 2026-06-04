@@ -300,7 +300,11 @@
                border-top:1px solid #e6e9ef;">
             <p style="margin:0; font-family:Arial,Helvetica,sans-serif;
                       font-size:11px; color:#9ba8b6;">
-              Showing top {{ articles|length }} articles (limited per category)
+              {% if max_per_category %}
+              Showing top {{ max_per_category }} article{{ 's' if max_per_category != 1 else '' }} per category
+              {% else %}
+              Showing {{ articles|length }} articles
+              {% endif %}
               &mdash; all {{ total_pending }} pending articles have been archived.
             </p>
           </td>
@@ -317,10 +321,8 @@
                         margin:0 auto 14px; font-size:0; line-height:0;">&nbsp;</div>
             <p style="margin:0;
                       font-family:Arial,Helvetica,sans-serif;
-                      font-size:11px; color:rgba(255,255,255,0.58); line-height:1.7;">
-              Curated by
-              <strong style="color:rgba(255,255,255,0.85);">{{ from_name }}</strong>
-              &nbsp;&middot;&nbsp; Powered by NewsRobot
+                      font-size:11px; color:rgba(255,255,255,0.72); line-height:1.7;">
+              Curated by <strong style="color:#fff;">{{ from_name }}</strong> AI Robot
             </p>
           </td>
         </tr>
