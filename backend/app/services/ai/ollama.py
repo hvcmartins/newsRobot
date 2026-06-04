@@ -76,23 +76,30 @@ class OllamaProvider(AIProvider):
             logger.warning("Ollama JSON parse failed: %s", raw)
             raise ValueError(f"Invalid JSON from Ollama: {raw}") from exc
 
-    def enrich_article(self, title, excerpt, topic_profile, categories) -> EnrichmentResult:
+    def enrich_article(self, title, excerpt, topic_profile, categories,
+                       accepted_languages=None, translation_language=None) -> EnrichmentResult:
+        from app.services.ai.openai_provider import _build_translation_instruction
         cats_str = ", ".join(categories) if categories else "Other"
+        trans = _build_translation_instruction(accepted_languages, translation_language)
         if topic_profile:
             system = RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile)
             user = ENRICH_USER_TPL.format(
-                title=title, excerpt=(excerpt or "(none)")[:1500], categories=cats_str,
+                title=title, excerpt=(excerpt or "(none)")[:1500],
+                categories=cats_str, translation_instruction=trans,
             )
         else:
             system = None
             user = ENRICH_NO_PROFILE_TPL.format(
-                title=title, excerpt=(excerpt or "(none)")[:1500], categories=cats_str,
+                title=title, excerpt=(excerpt or "(none)")[:1500],
+                categories=cats_str, translation_instruction=trans,
             )
         raw = self._ask(user, max_tokens=800, system=system)
         try:
             data = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
         except (ValueError, json.JSONDecodeError) as exc:
             raise ValueError(f"enrich_article JSON parse failed: {raw[:200]}") from exc
+        translated_title = (str(data["translated_title"]).strip()
+                            if isinstance(data.get("translated_title"), str) else None)
         if topic_profile:
             score = max(0.0, min(1.0, float(data.get("score", 0.5))))
             reason = str(data.get("reason", ""))
@@ -104,7 +111,8 @@ class OllamaProvider(AIProvider):
             category = str(data.get("category", "")).strip() or None
         if category and categories and category not in categories:
             category = None
-        return EnrichmentResult(score=score, reason=reason, summary=summary, category=category)
+        return EnrichmentResult(score=score, reason=reason, summary=summary,
+                                category=category, translated_title=translated_title)
 
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
         system = RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile)
