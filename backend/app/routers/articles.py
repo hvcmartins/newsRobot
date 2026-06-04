@@ -307,6 +307,44 @@ def re_enrich_article(article_id: int, db: Session = Depends(get_db)):
     return {"queued": True}
 
 
+@router.post("/fetch-missing-images")
+def fetch_missing_images(tenant_id: int, db: Session = Depends(get_db)):
+    """Background-fetch og:image for every queued article that has no image."""
+    from concurrent.futures import ThreadPoolExecutor
+    from app.services.scraper.base import fetch_og_image
+    from app.database import SessionLocal
+
+    missing = (db.query(Article.id, Article.url)
+               .filter(Article.tenant_id == tenant_id,
+                       Article.image_url.is_(None),
+                       Article.archived_at.is_(None),
+                       Article.duplicate_of_id.is_(None))
+               .all())
+
+    if not missing:
+        return {"queued": 0}
+
+    def _fetch_one(article_id: int, url: str) -> None:
+        img = fetch_og_image(url)
+        if not img:
+            return
+        s = SessionLocal()
+        try:
+            a = s.get(Article, article_id)
+            if a and not a.image_url:
+                a.image_url = img
+                s.commit()
+        finally:
+            s.close()
+
+    executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="imgfetch")
+    for row in missing:
+        executor.submit(_fetch_one, row.id, row.url)
+    executor.shutdown(wait=False)
+
+    return {"queued": len(missing)}
+
+
 @router.post("/{article_id}/fetch-image")
 def fetch_article_image(article_id: int, db: Session = Depends(get_db)):
     """Fetch og:image for an article that has no image yet."""

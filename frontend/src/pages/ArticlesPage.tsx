@@ -67,6 +67,17 @@ export default function ArticlesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['articles', tenantId] }),
   })
 
+  const fetchMissingImagesMut = useMutation({
+    mutationFn: () => articleApi.fetchMissingImages(tenantId),
+    onSuccess: (res) => {
+      if (res.queued > 0) {
+        setTimeout(() => qc.invalidateQueries({ queryKey: ['articles', tenantId] }), 8_000)
+      }
+    },
+  })
+
+  const missingImageCount = (data?.items ?? []).filter((a) => !a.image_url).length
+
   const handleFilterChange = useCallback((f: Filters) => setFilters(f), [])
 
   if (!activeTenant) {
@@ -80,23 +91,44 @@ export default function ArticlesPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>News Queue</h1>
-        <p style={{ fontSize: 13, color: '#888', margin: 0 }}>
-          {data?.total != null
-            ? `${data.total} article${data.total !== 1 ? 's' : ''} pending`
-            : 'Pending articles awaiting your next digest'}
-          {nextSend && !scrapePaused && (
-            <span style={{ marginLeft: 8, color: 'var(--brand-color)', fontWeight: 500 }}>
-              · Next send {nextSend}
-            </span>
-          )}
-          {scrapePaused && (
-            <span style={{ marginLeft: 8, color: '#795548', fontWeight: 500 }}>
-              · Scraping paused
-            </span>
-          )}
-        </p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>News Queue</h1>
+          <p style={{ fontSize: 13, color: '#888', margin: 0 }}>
+            {data?.total != null
+              ? `${data.total} article${data.total !== 1 ? 's' : ''} pending`
+              : 'Pending articles awaiting your next digest'}
+            {nextSend && !scrapePaused && (
+              <span style={{ marginLeft: 8, color: 'var(--brand-color)', fontWeight: 500 }}>
+                · Next send {nextSend}
+              </span>
+            )}
+            {scrapePaused && (
+              <span style={{ marginLeft: 8, color: '#795548', fontWeight: 500 }}>
+                · Scraping paused
+              </span>
+            )}
+          </p>
+        </div>
+        {missingImageCount > 0 && (
+          <button
+            onClick={() => fetchMissingImagesMut.mutate()}
+            disabled={fetchMissingImagesMut.isPending || fetchMissingImagesMut.isSuccess}
+            style={{
+              flexShrink: 0, marginTop: 4,
+              padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+              border: '1px solid #e0e0e0', cursor: fetchMissingImagesMut.isPending || fetchMissingImagesMut.isSuccess ? 'default' : 'pointer',
+              background: fetchMissingImagesMut.isSuccess ? '#f0fdf4' : '#fff',
+              color: fetchMissingImagesMut.isSuccess ? '#16a34a' : '#555',
+            }}
+          >
+            {fetchMissingImagesMut.isPending
+              ? 'Queuing…'
+              : fetchMissingImagesMut.isSuccess
+                ? `✓ Fetching ${fetchMissingImagesMut.data?.queued ?? missingImageCount} images`
+                : `🖼 Fetch ${missingImageCount} missing image${missingImageCount !== 1 ? 's' : ''}`}
+          </button>
+        )}
       </div>
 
       <ArticleFilters

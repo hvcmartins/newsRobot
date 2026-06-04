@@ -29,6 +29,8 @@ export const articleApi = {
     client.post<{ queued: boolean }>(`/api/articles/${id}/re-enrich`).then((r) => r.data),
   fetchImage: (id: number) =>
     client.post<{ image_url: string | null }>(`/api/articles/${id}/fetch-image`).then((r) => r.data),
+  fetchMissingImages: (tenantId: number) =>
+    client.post<{ queued: number }>('/api/articles/fetch-missing-images', null, { params: { tenant_id: tenantId } }).then((r) => r.data),
   enrichmentStatus: (tenantId: number) =>
     client.get<{ total: number; enriched: number; pending: number; paused: boolean; tokens_per_second: number | null; seconds_per_article: number | null }>(
       '/api/articles/enrichment-status', { params: { tenant_id: tenantId } }
