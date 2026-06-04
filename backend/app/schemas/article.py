@@ -1,16 +1,14 @@
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
-import datetime
+from pydantic import BaseModel
+from .base import ORMBase, UTCDatetime
 
 
-class ArticleSourceRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class ArticleSourceRead(ORMBase):
     id: int
     name: str
 
 
-class ArticleRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class ArticleRead(ORMBase):
     id: int
     tenant_id: int
     source_id: int
@@ -20,8 +18,8 @@ class ArticleRead(BaseModel):
     excerpt: Optional[str] = None
     summary: Optional[str] = None
     url: str
-    published_at: Optional[datetime.datetime] = None
-    scraped_at: datetime.datetime
+    published_at: Optional[UTCDatetime] = None
+    scraped_at: UTCDatetime
     image_url: Optional[str] = None
     category: Optional[str] = None
     relevance_score: float

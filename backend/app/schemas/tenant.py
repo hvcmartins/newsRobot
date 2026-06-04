@@ -1,7 +1,7 @@
 from typing import Optional
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, field_validator
 import re
-import datetime
+from .base import ORMBase, UTCDatetime
 
 
 class TenantBase(BaseModel):
@@ -43,9 +43,8 @@ class TenantUpdate(BaseModel):
     translation_language: Optional[str] = None
 
 
-class TenantRead(TenantBase):
-    model_config = ConfigDict(from_attributes=True)
+class TenantRead(TenantBase, ORMBase):
     id: int
     scrape_paused: bool = False
-    created_at: datetime.datetime
-    updated_at: datetime.datetime
+    created_at: UTCDatetime
+    updated_at: UTCDatetime

@@ -1,7 +1,7 @@
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
-import datetime
+from pydantic import BaseModel
 from app.models.catalog_source import CatalogSourceType
+from .base import ORMBase, UTCDatetime
 
 
 class CatalogSourceBase(BaseModel):
@@ -28,8 +28,7 @@ class CatalogSourceUpdate(BaseModel):
     is_verified: Optional[bool] = None
 
 
-class CatalogSourceRead(CatalogSourceBase):
-    model_config = ConfigDict(from_attributes=True)
+class CatalogSourceRead(CatalogSourceBase, ORMBase):
     id: int
-    added_at: datetime.datetime
-    updated_at: datetime.datetime
+    added_at: UTCDatetime
+    updated_at: UTCDatetime

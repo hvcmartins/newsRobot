@@ -1,7 +1,7 @@
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
-import datetime
+from pydantic import BaseModel
 from app.models.source import SourceType
+from .base import ORMBase, UTCDatetime
 
 
 class SourceBase(BaseModel):
@@ -28,9 +28,8 @@ class SourceUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class SourceRead(SourceBase):
-    model_config = ConfigDict(from_attributes=True)
+class SourceRead(SourceBase, ORMBase):
     id: int
-    last_scraped_at: Optional[datetime.datetime] = None
-    created_at: datetime.datetime
-    updated_at: datetime.datetime
+    last_scraped_at: Optional[UTCDatetime] = None
+    created_at: UTCDatetime
+    updated_at: UTCDatetime

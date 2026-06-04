@@ -1,7 +1,7 @@
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
-import datetime
+from pydantic import BaseModel
 from app.models.email_config import EmailFrequency
+from .base import ORMBase, UTCDatetime
 
 
 class EmailConfigBase(BaseModel):
@@ -61,9 +61,8 @@ class EmailConfigUpdate(BaseModel):
     yearly_digest_time: Optional[str] = None
 
 
-class EmailConfigRead(EmailConfigBase):
-    model_config = ConfigDict(from_attributes=True)
+class EmailConfigRead(EmailConfigBase, ORMBase):
     id: int
     smtp_password: Optional[str] = None  # masked in responses
-    created_at: datetime.datetime
-    updated_at: datetime.datetime
+    created_at: UTCDatetime
+    updated_at: UTCDatetime
