@@ -1,6 +1,13 @@
 import client from './client'
 import type { ScrapeRunListResponse } from './types'
 
+export interface ScrapeStatus {
+  is_running: boolean
+  total: number
+  done: number
+  articles_new: number
+}
+
 export const scrapeRunApi = {
   list: (tenantId: number, page = 1, size = 20) =>
     client
@@ -10,4 +17,6 @@ export const scrapeRunApi = {
     client.post('/api/scrape-runs/trigger', null, { params: { tenant_id: tenantId } }).then((r) => r.data),
   triggerSource: (sourceId: number) =>
     client.post(`/api/scrape-runs/trigger/${sourceId}`).then((r) => r.data),
+  status: (tenantId: number) =>
+    client.get<ScrapeStatus>('/api/scrape-runs/status', { params: { tenant_id: tenantId } }).then((r) => r.data),
 }

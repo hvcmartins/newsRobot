@@ -22,6 +22,17 @@ _enrich_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="enrich"
 _paused_tenants: set[int] = set()
 _paused_lock = threading.Lock()
 
+# Per-tenant scrape progress — updated by run_all_sources
+_scrape_state: dict[int, dict] = {}
+_scrape_lock = threading.Lock()
+
+
+def get_scrape_status(tenant_id: int) -> dict:
+    with _scrape_lock:
+        return dict(_scrape_state.get(tenant_id, {
+            "is_running": False, "total": 0, "done": 0, "articles_new": 0,
+        }))
+
 
 def pause_tenant_enrichment(tenant_id: int) -> None:
     with _paused_lock:
@@ -322,7 +333,27 @@ def run_all_sources(tenant_id: int, db: Session) -> list[ScrapeRun]:
     sources = (db.query(Source)
                .filter_by(tenant_id=tenant_id, is_active=True)
                .all())
-    return [run_source(source.id, db) for source in sources]
+    with _scrape_lock:
+        _scrape_state[tenant_id] = {
+            "is_running": True, "total": len(sources), "done": 0, "articles_new": 0,
+        }
+    runs = []
+    for source in sources:
+        run = run_source(source.id, db)
+        runs.append(run)
+        with _scrape_lock:
+            s = _scrape_state.get(tenant_id, {})
+            s["done"] = s.get("done", 0) + 1
+            s["articles_new"] = s.get("articles_new", 0) + (run.articles_new or 0)
+            _scrape_state[tenant_id] = s
+    with _scrape_lock:
+        _scrape_state[tenant_id] = {
+            "is_running": False,
+            "total": len(sources),
+            "done": len(sources),
+            "articles_new": sum(r.articles_new or 0 for r in runs),
+        }
+    return runs
 
 
 def enrich_pending(tenant_id: int, db: Session) -> int:

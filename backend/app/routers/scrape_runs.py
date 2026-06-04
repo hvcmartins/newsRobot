@@ -10,6 +10,13 @@ from app.schemas.scrape_run import ScrapeRunRead, ScrapeRunListResponse
 router = APIRouter()
 
 
+@router.get("/status")
+def scrape_status(tenant_id: int):
+    """Return current in-progress scrape state for this tenant."""
+    from app.services.scraper.runner import get_scrape_status
+    return get_scrape_status(tenant_id)
+
+
 @router.get("/", response_model=ScrapeRunListResponse)
 def list_runs(
     tenant_id: int,
