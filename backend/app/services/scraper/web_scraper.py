@@ -258,9 +258,29 @@ class WebScraper(AbstractScraper):
             img_el = item.find("img")
             image_url = None
             if img_el:
-                src = img_el.get("src") or img_el.get("data-src", "")
-                if src:
-                    image_url = src if src.startswith("http") else urljoin(self.source_url, src)
+                # Try src attributes in priority order; skip placeholders / data URIs
+                _lazy_attrs = (
+                    "src", "data-src", "data-lazy-src", "data-original",
+                    "data-wp-src", "data-full-url", "data-img-src",
+                )
+                raw_src = ""
+                for attr in _lazy_attrs:
+                    val = img_el.get(attr, "")
+                    if val and not val.startswith("data:") and "placeholder" not in val.lower():
+                        raw_src = val
+                        break
+                # Fall back to first URL in srcset when src is a 1×1 spacer
+                if not raw_src:
+                    for ss_attr in ("srcset", "data-srcset"):
+                        ss = img_el.get(ss_attr, "")
+                        if ss:
+                            first = ss.strip().split()[0]
+                            if first.startswith("http"):
+                                raw_src = first
+                                break
+                if raw_src:
+                    image_url = (raw_src if raw_src.startswith("http")
+                                 else urljoin(self.source_url, raw_src))
 
             published_at = _extract_date_from_item(item) or page_date
 

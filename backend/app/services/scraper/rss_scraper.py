@@ -59,15 +59,53 @@ def _strip_html(text: str) -> str:
     return BeautifulSoup(text, "html.parser").get_text(separator=" ").strip()
 
 
+def _is_placeholder_src(src: str) -> bool:
+    """Return True for 1×1 tracking pixels, data URIs, and SVG spacers."""
+    if not src:
+        return True
+    low = src.lower()
+    return (
+        low.startswith("data:")
+        or "placeholder" in low
+        or "blank.gif" in low
+        or "1x1" in low
+        or "spacer" in low
+    )
+
+
 def _extract_image(entry) -> str | None:
+    # 1. media:thumbnail — most explicit signal
     if mt := entry.get("media_thumbnail"):
-        return mt[0].get("url")
+        url = mt[0].get("url", "")
+        if url and not _is_placeholder_src(url):
+            return url
+    # 2. image enclosures
     for enc in entry.get("enclosures", []):
         if enc.get("type", "").startswith("image/"):
-            return enc.get("href")
+            url = enc.get("href", "")
+            if url and not _is_placeholder_src(url):
+                return url
+    # 3. media:content with image medium/type
     for mc in entry.get("media_content", []):
         if mc.get("medium") == "image" or mc.get("type", "").startswith("image/"):
-            return mc.get("url")
+            url = mc.get("url", "")
+            if url and not _is_placeholder_src(url):
+                return url
+    # 4. first real <img> inside content:encoded or summary HTML
+    #    Many WordPress / CMS feeds put images only here (e.g. TATOLI, BBC)
+    html_fields = []
+    if entry.get("content"):
+        html_fields.append(entry.content[0].value)
+    if entry.get("summary"):
+        html_fields.append(entry.get("summary", ""))
+    for html in html_fields:
+        if not html:
+            continue
+        soup = BeautifulSoup(html, "html.parser")
+        for img in soup.find_all("img"):
+            src = img.get("src", "")
+            if src and src.startswith("http") and not _is_placeholder_src(src):
+                return src
     return None
 
 
