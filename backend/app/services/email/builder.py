@@ -80,7 +80,16 @@ def build_email_context(tenant_id: int, articles: list | None,
         cat = a.category if a.category and a.category not in _UNCATEGORIZED else "General"
         groups[cat].append(a)
 
-    ordered_cats = sorted(groups.keys(), key=lambda c: (c == "General", c))
+    try:
+        tenant_cat_order = json.loads(tenant.ai_categories or "[]")
+    except Exception:
+        tenant_cat_order = []
+    cat_order_idx = {c: i for i, c in enumerate(tenant_cat_order)}
+    ordered_cats = sorted(groups.keys(), key=lambda c: (
+        c == "General",
+        cat_order_idx.get(c, len(cat_order_idx)),
+        c,
+    ))
 
     # Apply per-category limit — articles are already sorted by relevance desc
     if max_n:

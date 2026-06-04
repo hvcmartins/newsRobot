@@ -10,21 +10,25 @@ interface Props {
   total: number
   onMarkRead: (id: number) => void
   onReEnrich?: (id: number) => void
+  categoryOrder?: string[]
 }
 
 const _UNCATEGORIZED = new Set(['Uncategorized', 'Other', '', undefined, null])
 
-function groupByCategory(articles: Article[]): Array<[string, Article[]]> {
+function groupByCategory(articles: Article[], order: string[]): Array<[string, Article[]]> {
   const map = new Map<string, Article[]>()
   for (const a of articles) {
     const cat = (a.category && !_UNCATEGORIZED.has(a.category)) ? a.category : 'General'
     if (!map.has(cat)) map.set(cat, [])
     map.get(cat)!.push(a)
   }
+  const orderIdx = new Map(order.map((c, i) => [c, i]))
   return [...map.entries()].sort(([a], [b]) => {
     if (a === 'General') return 1
     if (b === 'General') return -1
-    return a.localeCompare(b)
+    const ia = orderIdx.has(a) ? orderIdx.get(a)! : order.length
+    const ib = orderIdx.has(b) ? orderIdx.get(b)! : order.length
+    return ia !== ib ? ia - ib : a.localeCompare(b)
   })
 }
 
@@ -35,7 +39,7 @@ const grid: React.CSSProperties = {
 }
 
 export default function ArticleFeed({
-  articles, isLoading, onMarkRead, onReEnrich,
+  articles, isLoading, onMarkRead, onReEnrich, categoryOrder = [],
 }: Props) {
   if (isLoading) {
     return (
@@ -55,7 +59,7 @@ export default function ArticleFeed({
   }
 
   const hasCategories = articles.some(a => a.category && !_UNCATEGORIZED.has(a.category))
-  const groups = hasCategories ? groupByCategory(articles) : null
+  const groups = hasCategories ? groupByCategory(articles, categoryOrder) : null
 
   if (groups) {
     return (

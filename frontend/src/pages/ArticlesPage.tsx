@@ -34,10 +34,20 @@ export default function ArticlesPage() {
     refetchInterval: 60_000,
   })
 
+  const categoryOrder: string[] = React.useMemo(() => {
+    try { return JSON.parse(activeTenant?.ai_categories ?? '[]') } catch { return [] }
+  }, [activeTenant?.ai_categories])
+
   const categories = React.useMemo(() => {
     const cats = new Set((data?.items ?? []).map((a) => a.category).filter(Boolean) as string[])
-    return [...cats].sort()
-  }, [data?.items])
+    // Sort filter dropdown by the same defined order, then alpha for unrecognised ones
+    const orderIdx = new Map(categoryOrder.map((c, i) => [c, i]))
+    return [...cats].sort((a, b) => {
+      const ia = orderIdx.has(a) ? orderIdx.get(a)! : categoryOrder.length
+      const ib = orderIdx.has(b) ? orderIdx.get(b)! : categoryOrder.length
+      return ia !== ib ? ia - ib : a.localeCompare(b)
+    })
+  }, [data?.items, categoryOrder])
 
   const markReadMut = useMutation({
     mutationFn: articleApi.markRead,

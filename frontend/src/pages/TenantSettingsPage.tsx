@@ -35,6 +35,8 @@ export default function TenantSettingsPage() {
   const [editingCatIdx, setEditingCatIdx] = useState<number | null>(null)
   const [editCatValue, setEditCatValue] = useState('')
   const [addCatValue, setAddCatValue] = useState('')
+  const [dragCatIdx, setDragCatIdx] = useState<number | null>(null)
+  const [dragOverCatIdx, setDragOverCatIdx] = useState<number | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState('')
   const [addingTenant, setAddingTenant] = useState(false)
   const [newTenant, setNewTenant] = useState({ name: '', slug: '', primary_color: '#0066cc' })
@@ -167,6 +169,16 @@ export default function TenantSettingsPage() {
   const startEditCat = (idx: number) => {
     setEditingCatIdx(idx)
     setEditCatValue(categories[idx])
+  }
+
+  const dropCat = (targetIdx: number) => {
+    if (dragCatIdx === null || dragCatIdx === targetIdx) return
+    const next = [...categories]
+    const [moved] = next.splice(dragCatIdx, 1)
+    next.splice(targetIdx, 0, moved)
+    setCategories(next)
+    setDragCatIdx(null)
+    setDragOverCatIdx(null)
   }
 
   const commitEditCat = () => {
@@ -359,13 +371,23 @@ export default function TenantSettingsPage() {
               ) : (
                 <span
                   key={c}
+                  draggable
+                  onDragStart={() => { setDragCatIdx(i); setEditingCatIdx(null) }}
+                  onDragOver={(e) => { e.preventDefault(); setDragOverCatIdx(i) }}
+                  onDrop={() => dropCat(i)}
+                  onDragEnd={() => { setDragCatIdx(null); setDragOverCatIdx(null) }}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 4,
-                    background: '#f0f4ff', border: '1px solid #c7d8fb',
-                    borderRadius: 12, padding: '3px 6px 3px 10px',
+                    background: dragCatIdx === i ? '#e8efff' : '#f0f4ff',
+                    border: `1px solid ${dragOverCatIdx === i && dragCatIdx !== i ? 'var(--brand-color)' : '#c7d8fb'}`,
+                    borderRadius: 12, padding: '3px 6px 3px 8px',
                     fontSize: 12, color: '#3a5fbb', userSelect: 'none',
+                    cursor: 'grab',
+                    opacity: dragCatIdx === i ? 0.5 : 1,
+                    outline: dragOverCatIdx === i && dragCatIdx !== i ? '2px solid var(--brand-color)' : 'none',
                   }}
                 >
+                  <span style={{ fontSize: 10, color: '#aac', marginRight: 2, cursor: 'grab' }} title="Drag to reorder">⠿</span>
                   <span
                     onClick={() => startEditCat(i)}
                     style={{ cursor: 'text' }}
@@ -404,7 +426,7 @@ export default function TenantSettingsPage() {
             />
           </div>
           <p style={{ fontSize: 11, color: '#aaa', margin: 0 }}>
-            Click a tag to rename · × to remove · Enter or comma to add · Backspace on empty input removes last
+            Drag to reorder · click label to rename · × to remove · Enter or comma to add
           </p>
           <Button variant="secondary" size="sm" loading={suggestingCats} onClick={suggestCategories}
             disabled={!form.topic_profile?.trim()}>
