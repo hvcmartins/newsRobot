@@ -92,7 +92,11 @@ def _extract_image(entry) -> str | None:
             if url and not _is_placeholder_src(url):
                 return url
     # 4. first real <img> inside content:encoded or summary HTML
-    #    Many WordPress / CMS feeds put images only here (e.g. TATOLI, BBC)
+    #    Many WordPress / CMS feeds put images only here, often with lazy-loading.
+    _LAZY_ATTRS = (
+        "src", "data-src", "data-lazy-src", "data-original",
+        "data-wp-src", "data-full-url", "data-img-src",
+    )
     html_fields = []
     if entry.get("content"):
         html_fields.append(entry.content[0].value)
@@ -103,9 +107,17 @@ def _extract_image(entry) -> str | None:
             continue
         soup = BeautifulSoup(html, "html.parser")
         for img in soup.find_all("img"):
-            src = img.get("src", "")
-            if src and src.startswith("http") and not _is_placeholder_src(src):
-                return src
+            for attr in _LAZY_ATTRS:
+                val = img.get(attr, "")
+                if val and val.startswith("http") and not _is_placeholder_src(val):
+                    return val
+            # srcset fallback — take first URL
+            for ss_attr in ("srcset", "data-srcset"):
+                ss = img.get(ss_attr, "")
+                if ss:
+                    first = ss.strip().split()[0]
+                    if first.startswith("http") and not _is_placeholder_src(first):
+                        return first
     return None
 
 

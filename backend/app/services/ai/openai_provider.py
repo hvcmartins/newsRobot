@@ -22,24 +22,19 @@ _LANG_NAMES = {
 
 def _build_translation_instruction(accepted_languages: list[str] | None,
                                     translation_language: str | None) -> str:
-    """Return an extra prompt line requesting translation when the article is
-    not in an accepted language. Asks for both a translated title and summary."""
+    """Return a prompt instruction that writes the summary in translation_language
+    and provides a translated title when the original differs.
+
+    accepted_languages is kept as a parameter for call-site compatibility but
+    is not used here — summary language is determined solely by translation_language.
+    """
     if not translation_language:
         return ""
     lang_name = _LANG_NAMES.get(translation_language, translation_language.upper())
-    if accepted_languages:
-        accepted = [_LANG_NAMES.get(l, l.upper()) for l in accepted_languages]
-        accepted_str = ", ".join(accepted)
-        return (
-            f"\n4. Detect the article language. "
-            f"If it is NOT one of [{accepted_str}]: "
-            f"write the summary in {lang_name} AND set translated_title to the title translated into {lang_name}. "
-            f"If it IS one of [{accepted_str}]: write the summary in the original language and set translated_title to null.\n"
-        )
     return (
-        f"\n4. Detect the article language. "
-        f"If it is not already {lang_name}: "
-        f"write the summary in {lang_name} AND set translated_title to the title translated into {lang_name}. "
+        f"\n4. Always write the summary in {lang_name}. "
+        f"If the article title is not already in {lang_name}, set translated_title "
+        f"to the title translated into {lang_name}. "
         f"Otherwise set translated_title to null.\n"
     )
 

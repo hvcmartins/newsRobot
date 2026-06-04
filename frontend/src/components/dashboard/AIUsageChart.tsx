@@ -2,71 +2,14 @@ import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { parseUTC } from '@/utils/dates'
-import { aiUsageApi, AIUsageView } from '@/api/aiUsage'
+import { aiUsageApi, AIUsageView, AIUsageBucket } from '@/api/aiUsage'
 
-type Metric = 'calls' | 'tokens'
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-interface BarProps {
-  value: number
-  maxVal: number
-  label: string
-  height: number
-  width: number
-  x: number
-  barColor: string
-  trackColor: string
-}
-
-function Bar({ value, maxVal, label, height, width, x, barColor, trackColor }: BarProps) {
-  const [hover, setHover] = useState(false)
-  const fillH = maxVal > 0 ? Math.max(2, Math.round((value / maxVal) * height)) : 0
-
-  return (
-    <g
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{ cursor: 'default' }}
-    >
-      {/* Track */}
-      <rect x={x} y={0} width={width} height={height} rx={1} fill={trackColor} />
-      {/* Bar */}
-      {fillH > 0 && (
-        <rect x={x} y={height - fillH} width={width} height={fillH} rx={1} fill={barColor} />
-      )}
-      {/* Hover tooltip */}
-      {hover && value > 0 && (
-        <g>
-          <rect
-            x={Math.max(0, x - 24)}
-            y={height - fillH - 28}
-            width={52}
-            height={20}
-            rx={3}
-            fill="#333"
-            opacity={0.9}
-          />
-          <text
-            x={Math.max(0, x - 24) + 26}
-            y={height - fillH - 14}
-            textAnchor="middle"
-            fill="#fff"
-            fontSize={9}
-          >
-            {value.toLocaleString()}
-          </text>
-          <text
-            x={Math.max(0, x - 24) + 26}
-            y={height - fillH - 5}
-            textAnchor="middle"
-            fill="#ccc"
-            fontSize={8}
-          >
-            {label}
-          </text>
-        </g>
-      )}
-    </g>
-  )
+function fmtNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`
+  return n.toString()
 }
 
 function fmtBucketLabel(ts: string, view: AIUsageView): string {
@@ -76,10 +19,13 @@ function fmtBucketLabel(ts: string, view: AIUsageView): string {
   return format(d, 'MMM d')
 }
 
-function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
-  return String(n)
+function getNiceTicks(maxVal: number, n: number = 4): number[] {
+  if (maxVal === 0) return [0]
+  if (maxVal <= n) return Array.from({ length: Math.ceil(maxVal) + 1 }, (_, i) => i)
+  const step = maxVal / n
+  const magnitude = Math.pow(10, Math.floor(Math.log10(step)))
+  const niceStep = Math.ceil(step / magnitude) * magnitude
+  return Array.from({ length: n + 1 }, (_, i) => Math.round(niceStep * i))
 }
 
 const VIEW_LABELS: Record<AIUsageView, string> = {
@@ -88,11 +34,139 @@ const VIEW_LABELS: Record<AIUsageView, string> = {
   day: 'Last 30d',
 }
 
-const VIEW_TICK_EVERY: Record<AIUsageView, number> = {
-  minute: 10,
-  hour: 4,
-  day: 5,
+// ── Single chart panel ────────────────────────────────────────────────────────
+
+interface PanelProps {
+  title: string
+  todayLabel: string
+  buckets: AIUsageBucket[]
+  getValue: (b: AIUsageBucket) => number
+  barColor: string
+  view: AIUsageView
 }
+
+const SVG_W = 500
+const CHART_H = 90
+const Y_AXIS_W = 42
+const BOTTOM_H = 18
+
+function BarChartPanel({ title, todayLabel, buckets, getValue, barColor, view }: PanelProps) {
+  const [hovered, setHovered] = useState<number | null>(null)
+
+  const values = buckets.map(getValue)
+  const maxVal = Math.max(...values, 1)
+  const ticks = getNiceTicks(maxVal, 4)
+  const n = buckets.length || 1
+  const chartW = SVG_W - Y_AXIS_W - 6
+  const barPitch = chartW / n
+  const barW = Math.max(1, barPitch - 1)
+
+  const displayVal = hovered !== null ? fmtNumber(values[hovered]) : todayLabel
+  const displaySub = hovered !== null
+    ? fmtBucketLabel(buckets[hovered].ts, view)
+    : 'today'
+
+  return (
+    <div style={{
+      background: '#111213', borderRadius: 10,
+      padding: '16px 18px 10px',
+      display: 'flex', flexDirection: 'column', gap: 0,
+    }}>
+      {/* Panel header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#e0e0e0' }}>{title}</span>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: barColor, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+            {displayVal}
+          </div>
+          <div style={{ fontSize: 10, color: '#555', marginTop: 3, letterSpacing: '0.3px' }}>
+            {displaySub}
+          </div>
+        </div>
+      </div>
+
+      {/* SVG chart */}
+      <svg
+        viewBox={`0 0 ${SVG_W} ${CHART_H + BOTTOM_H}`}
+        style={{ width: '100%', display: 'block' }}
+        onMouseLeave={() => setHovered(null)}
+      >
+        {/* Subtle Y-axis grid lines + tick labels */}
+        {ticks.map((tick, ti) => {
+          const y = CHART_H - (tick / maxVal) * CHART_H
+          return (
+            <g key={ti}>
+              <line
+                x1={Y_AXIS_W} x2={SVG_W - 6} y1={y} y2={y}
+                stroke="rgba(255,255,255,0.04)" strokeWidth={1}
+              />
+              <text
+                x={Y_AXIS_W - 5} y={y + 3.5}
+                textAnchor="end" fill="#3a3a3a" fontSize={9}
+                fontFamily="ui-monospace,monospace"
+              >
+                {fmtNumber(tick)}
+              </text>
+            </g>
+          )
+        })}
+
+        {/* Dashed baseline */}
+        <line
+          x1={Y_AXIS_W} x2={SVG_W - 6} y1={CHART_H} y2={CHART_H}
+          stroke={barColor} strokeWidth={1} strokeDasharray="3 5" opacity={0.3}
+        />
+
+        {/* Bars */}
+        {buckets.map((b, i) => {
+          const val = getValue(b)
+          const barH = val > 0 ? Math.max(2, (val / maxVal) * CHART_H) : 0
+          const x = Y_AXIS_W + i * barPitch
+          return (
+            <rect
+              key={i}
+              x={x} y={CHART_H - barH}
+              width={barW} height={barH}
+              fill={hovered === i ? '#ffffff' : barColor}
+              rx={1}
+              onMouseEnter={() => setHovered(i)}
+              style={{ cursor: 'crosshair' }}
+            />
+          )
+        })}
+
+        {/* Transparent hit-areas covering full chart height so hover works even on empty buckets */}
+        {buckets.map((_, i) => (
+          <rect
+            key={`hit-${i}`}
+            x={Y_AXIS_W + i * barPitch} y={0}
+            width={barPitch} height={CHART_H}
+            fill="transparent"
+            onMouseEnter={() => setHovered(i)}
+          />
+        ))}
+
+        {/* X-axis: first and last label only */}
+        {buckets.length > 1 && <>
+          <text
+            x={Y_AXIS_W} y={CHART_H + BOTTOM_H - 3}
+            fill="#3a3a3a" fontSize={9} fontFamily="ui-monospace,monospace"
+          >
+            {fmtBucketLabel(buckets[0].ts, view)}
+          </text>
+          <text
+            x={SVG_W - 6} y={CHART_H + BOTTOM_H - 3}
+            textAnchor="end" fill="#3a3a3a" fontSize={9} fontFamily="ui-monospace,monospace"
+          >
+            {fmtBucketLabel(buckets[buckets.length - 1].ts, view)}
+          </text>
+        </>}
+      </svg>
+    </div>
+  )
+}
+
+// ── Exported component ────────────────────────────────────────────────────────
 
 interface Props {
   tenantId?: number
@@ -100,7 +174,6 @@ interface Props {
 
 export default function AIUsageChart({ tenantId }: Props) {
   const [view, setView] = useState<AIUsageView>('hour')
-  const [metric, setMetric] = useState<Metric>('calls')
 
   const { data, isLoading } = useQuery({
     queryKey: ['ai-usage', view, tenantId],
@@ -108,26 +181,10 @@ export default function AIUsageChart({ tenantId }: Props) {
     refetchInterval: view === 'minute' ? 30_000 : 60_000,
   })
 
-  const CHART_H = 72
-  const CHART_W = 560
-  const GAP = 1
-
   const buckets = data?.buckets ?? []
-  const n = buckets.length || 1
-  const barW = Math.max(1, Math.floor((CHART_W - GAP * (n - 1)) / n))
-  const barColor = metric === 'calls' ? 'var(--brand-color)' : '#9c27b0'
-  const trackColor = metric === 'calls' ? '#e8f0fe' : '#f3e5f5'
-  const tickEvery = VIEW_TICK_EVERY[view]
-
-  const values = buckets.map(b =>
-    metric === 'calls' ? b.calls : b.tokens_in + b.tokens_out
-  )
-  const maxVal = Math.max(...values, 1)
-
-  const today = data?.today
-  const todayCalls = Math.max(data?.today_db_calls ?? 0, today?.calls ?? 0)
-  const todayTokensIn = today?.tokens_in ?? 0
-  const todayTokensOut = today?.tokens_out ?? 0
+  const today = data?.today ?? { calls: 0, tokens_in: 0, tokens_out: 0 }
+  const todayCalls = Math.max(data?.today_db_calls ?? 0, today.calls)
+  const todayTokens = today.tokens_in + today.tokens_out
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -137,24 +194,6 @@ export default function AIUsageChart({ tenantId }: Props) {
           AI API Usage
         </span>
         <div style={{ display: 'flex', gap: 6 }}>
-          {/* Metric toggle */}
-          {(['calls', 'tokens'] as Metric[]).map(m => (
-            <button
-              key={m}
-              onClick={() => setMetric(m)}
-              style={{
-                fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12,
-                border: '1px solid',
-                borderColor: metric === m ? (m === 'calls' ? 'var(--brand-color)' : '#9c27b0') : '#e0e0e0',
-                background: metric === m ? (m === 'calls' ? '#e8f0fe' : '#f3e5f5') : '#fff',
-                color: metric === m ? (m === 'calls' ? 'var(--brand-color)' : '#9c27b0') : '#888',
-                cursor: 'pointer',
-              }}
-            >
-              {m === 'calls' ? 'Calls' : 'Tokens'}
-            </button>
-          ))}
-          {/* View toggle */}
           {(Object.keys(VIEW_LABELS) as AIUsageView[]).map(v => (
             <button
               key={v}
@@ -174,68 +213,58 @@ export default function AIUsageChart({ tenantId }: Props) {
         </div>
       </div>
 
-      {/* Chart */}
       {isLoading ? (
-        <div style={{ height: CHART_H + 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: 12, color: '#bbb' }}>Loading…</span>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {[0, 1].map(i => (
+            <div key={i} style={{ background: '#111213', borderRadius: 10, height: 160,
+              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 12, color: '#333' }}>Loading…</span>
+            </div>
+          ))}
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <svg
-            width="100%"
-            viewBox={`0 0 ${CHART_W} ${CHART_H + 16}`}
-            style={{ display: 'block', minWidth: 320 }}
-          >
-            {buckets.map((b, i) => (
-              <Bar
-                key={i}
-                value={metric === 'calls' ? b.calls : b.tokens_in + b.tokens_out}
-                maxVal={maxVal}
-                label={fmtBucketLabel(b.ts, view)}
-                height={CHART_H}
-                width={barW}
-                x={i * (barW + GAP)}
-                barColor={barColor}
-                trackColor={trackColor}
-              />
-            ))}
-            {/* X-axis tick labels */}
-            {buckets.map((b, i) =>
-              i % tickEvery === 0 ? (
-                <text
-                  key={i}
-                  x={i * (barW + GAP) + barW / 2}
-                  y={CHART_H + 13}
-                  textAnchor="middle"
-                  fill="#bbb"
-                  fontSize={8}
-                >
-                  {fmtBucketLabel(b.ts, view)}
-                </text>
-              ) : null
-            )}
-          </svg>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <BarChartPanel
+            title="API Calls"
+            todayLabel={todayCalls.toLocaleString()}
+            buckets={buckets}
+            getValue={b => b.calls}
+            barColor="#4ade80"
+            view={view}
+          />
+          <BarChartPanel
+            title="Tokens"
+            todayLabel={fmtNumber(todayTokens)}
+            buckets={buckets}
+            getValue={b => b.tokens_in + b.tokens_out}
+            barColor="#a78bfa"
+            view={view}
+          />
         </div>
       )}
 
-      {/* Today counters */}
-      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-        <Counter label="Today — calls" value={todayCalls.toLocaleString()} color="#333" />
-        <Counter label="Tokens in" value={fmtTokens(todayTokensIn)} color="#1565c0" />
-        <Counter label="Tokens out" value={fmtTokens(todayTokensOut)} color="#9c27b0" />
-        <Counter label="Total tokens" value={fmtTokens(todayTokensIn + todayTokensOut)} color="#444" />
-      </div>
+      {/* Today detail row */}
+      {!isLoading && (
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', paddingLeft: 2 }}>
+          <TodayCounter label="Calls today" value={todayCalls.toLocaleString()} color="#4ade80" />
+          <TodayCounter label="Tokens in" value={fmtNumber(today.tokens_in)} color="#60a5fa" />
+          <TodayCounter label="Tokens out" value={fmtNumber(today.tokens_out)} color="#a78bfa" />
+          <TodayCounter label="Total tokens" value={fmtNumber(todayTokens)} color="#f0f0f0" />
+        </div>
+      )}
     </div>
   )
 }
 
-function Counter({ label, value, color }: { label: string; value: string; color: string }) {
+function TodayCounter({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#bbb' }}>
+      <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#888' }}>
         {label}
       </span>
-      <span style={{ fontSize: 20, fontWeight: 700, color, lineHeight: 1 }}>{value}</span>
+      <span style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+        {value}
+      </span>
     </div>
   )
 }
