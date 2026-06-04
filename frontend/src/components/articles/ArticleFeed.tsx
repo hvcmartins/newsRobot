@@ -7,10 +7,7 @@ import Button from '@/components/ui/Button'
 interface Props {
   articles: Article[]
   isLoading: boolean
-  page: number
-  pages: number
   total: number
-  onPageChange: (p: number) => void
   onMarkRead: (id: number) => void
   onReEnrich?: (id: number) => void
 }
@@ -38,7 +35,7 @@ const grid: React.CSSProperties = {
 }
 
 export default function ArticleFeed({
-  articles, isLoading, page, pages, total, onPageChange, onMarkRead, onReEnrich,
+  articles, isLoading, onMarkRead, onReEnrich,
 }: Props) {
   if (isLoading) {
     return (
@@ -59,16 +56,6 @@ export default function ArticleFeed({
 
   const hasCategories = articles.some(a => a.category && !_UNCATEGORIZED.has(a.category))
   const groups = hasCategories ? groupByCategory(articles) : null
-
-  const pagination = pages > 1 && (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 24 }}>
-      <Button variant="secondary" size="sm" disabled={page <= 1}
-        onClick={() => onPageChange(page - 1)}>← Prev</Button>
-      <span style={{ fontSize: 13, color: '#666' }}>Page {page} of {pages} ({total} total)</span>
-      <Button variant="secondary" size="sm" disabled={page >= pages}
-        onClick={() => onPageChange(page + 1)}>Next →</Button>
-    </div>
-  )
 
   if (groups) {
     return (
@@ -102,19 +89,15 @@ export default function ArticleFeed({
             </div>
           </div>
         ))}
-        {pagination}
       </div>
     )
   }
 
   return (
-    <div>
-      <div style={{ ...grid, marginBottom: 24 }}>
-        {articles.map(a => (
-          <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} />
-        ))}
-      </div>
-      {pagination}
+    <div style={{ ...grid, marginBottom: 24 }}>
+      {articles.map(a => (
+        <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} />
+      ))}
     </div>
   )
 }

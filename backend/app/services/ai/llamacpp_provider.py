@@ -116,6 +116,44 @@ class LlamaCppProvider(AIProvider):
         logger.warning("llama.cpp: could not parse relevance letter from %r — defaulting 0.5", raw[:50])
         return RelevanceResult(score=0.5, reason="")
 
+    def enrich_article(self, title, excerpt, topic_profile, categories,
+                       accepted_languages=None, translation_language=None):
+        from app.services.ai.openai_provider import _build_translation_instruction
+        from app.services.ai.base import (ENRICH_USER_TPL, ENRICH_NO_PROFILE_TPL,
+                                          RELEVANCE_SYSTEM_TPL, EnrichmentResult)
+        cats_str = ", ".join(categories) if categories else "Other"
+        trans = _build_translation_instruction(accepted_languages, translation_language)
+        if topic_profile:
+            prompt = (RELEVANCE_SYSTEM_TPL.format(topic_profile=topic_profile) + "\n\n"
+                      + ENRICH_USER_TPL.format(
+                          title=title, excerpt=(excerpt or "(none)")[:800],
+                          categories=cats_str, translation_instruction=trans))
+        else:
+            prompt = ENRICH_NO_PROFILE_TPL.format(
+                title=title, excerpt=(excerpt or "(none)")[:800],
+                categories=cats_str, translation_instruction=trans)
+        try:
+            data = self._ask_json(prompt)
+        except ValueError:
+            # JSON parse failed — fall back to individual calls (no translation)
+            return super().enrich_article(title, excerpt, topic_profile, categories)
+
+        translated_title = (str(data["translated_title"]).strip()
+                            if isinstance(data.get("translated_title"), str) else None)
+        if topic_profile:
+            score = max(0.0, min(1.0, float(data.get("score", 0.5))))
+            reason = str(data.get("reason", ""))
+            summary = str(data["summary"]).strip() if isinstance(data.get("summary"), str) else None
+            category = str(data["category"]).strip() if isinstance(data.get("category"), str) else None
+        else:
+            score, reason = 0.5, ""
+            summary = str(data.get("summary", "")).strip() or None
+            category = str(data.get("category", "")).strip() or None
+        if category and categories and category not in categories:
+            category = None
+        return EnrichmentResult(score=score, reason=reason, summary=summary,
+                                category=category, translated_title=translated_title)
+
     def summarize(self, title, excerpt) -> str:
         return self._ask(
             f"Summarize in 2-3 sentences. Be factual.\n"

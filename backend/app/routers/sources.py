@@ -51,11 +51,32 @@ def update_source(source_id: int, data: SourceUpdate, db: Session = Depends(get_
 
 @router.delete("/{source_id}", status_code=204)
 def delete_source(source_id: int, db: Session = Depends(get_db)):
+    from app.models import Article, ScrapedUrl
     source = db.get(Source, source_id)
     if not source:
         raise HTTPException(404, "Source not found")
-    db.delete(source)
-    db.commit()
+    try:
+        # Null out duplicate_of_id references that point to this source's articles
+        sub = db.query(Article.id).filter(Article.source_id == source_id).subquery()
+        db.query(Article).filter(Article.duplicate_of_id.in_(sub)).update(
+            {Article.duplicate_of_id: None}, synchronize_session=False)
+        # Remove scraped-URL dedup records for this source's articles
+        urls = [r[0] for r in db.query(Article.url)
+                .filter(Article.source_id == source_id, Article.url.isnot(None)).all()]
+        if urls:
+            db.query(ScrapedUrl).filter(
+                ScrapedUrl.tenant_id == source.tenant_id,
+                ScrapedUrl.url.in_(urls),
+            ).delete(synchronize_session=False)
+        # Delete articles, then the source
+        db.query(Article).filter(Article.source_id == source_id).delete(
+            synchronize_session=False)
+        db.delete(source)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error("delete_source %d failed: %s", source_id, exc)
+        raise HTTPException(500, f"Could not delete source: {exc}")
 
 
 @router.post("/check-all")

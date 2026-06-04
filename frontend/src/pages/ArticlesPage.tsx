@@ -14,7 +14,6 @@ export default function ArticlesPage() {
   const { activeTenant, refreshTenants } = useTenant()
   const qc = useQueryClient()
   const [filters, setFilters] = useState<Filters>({})
-  const [page, setPage] = useState(1)
 
   const tenantId = activeTenant?.id ?? 0
 
@@ -25,8 +24,8 @@ export default function ArticlesPage() {
   })
 
   const { data, isLoading } = useQuery({
-    queryKey: ['articles', tenantId, filters, page],
-    queryFn: () => articleApi.list({ tenant_id: tenantId, ...filters, page, size: 20 }),
+    queryKey: ['articles', tenantId, filters],
+    queryFn: () => articleApi.list({ tenant_id: tenantId, ...filters, page: 1, size: 200 }),
     enabled: !!tenantId,
   })
 
@@ -113,7 +112,6 @@ export default function ArticlesPage() {
 
   const handleFilterChange = useCallback((f: Filters) => {
     setFilters(f)
-    setPage(1)
   }, [])
 
   if (!activeTenant) {
@@ -280,10 +278,7 @@ export default function ArticlesPage() {
       <ArticleFeed
         articles={data?.items ?? []}
         isLoading={isLoading}
-        page={page}
-        pages={data?.pages ?? 0}
         total={data?.total ?? 0}
-        onPageChange={setPage}
         onMarkRead={(id) => markReadMut.mutate(id)}
         onReEnrich={(id) => reEnrichSingleMut.mutate(id)}
       />

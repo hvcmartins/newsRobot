@@ -32,7 +32,9 @@ def list_articles(
     if archived is True:
         q = q.filter(Article.archived_at.isnot(None))
     else:
-        q = q.filter(Article.archived_at.is_(None))   # default: pending queue
+        # Pending queue: only show fully-enriched articles
+        q = q.filter(Article.archived_at.is_(None),
+                     Article.ai_enriched == True)  # noqa: E712
 
     if source_id:
         q = q.filter(Article.source_id == source_id)
@@ -55,7 +57,9 @@ def list_articles(
         q = q.filter(Article.is_read == is_read)
 
     total = q.count()
-    items = (q.order_by(Article.relevance_score.desc(), Article.scraped_at.desc())
+    items = (q.order_by(Article.category.asc().nullslast(),
+                        Article.relevance_score.desc(),
+                        Article.scraped_at.desc())
              .offset((page - 1) * size)
              .limit(size)
              .all())

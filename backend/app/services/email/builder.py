@@ -47,7 +47,8 @@ def build_email_context(tenant_id: int, articles: list | None,
         query = (db.query(Article)
                  .filter(Article.tenant_id == tenant_id,
                          Article.duplicate_of_id.is_(None),
-                         Article.archived_at.is_(None)))
+                         Article.archived_at.is_(None),
+                         Article.ai_enriched == True))  # noqa: E712
         if frequency != "immediate":
             query = query.filter(Article.scraped_at >= cutoff)
 
