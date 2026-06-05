@@ -142,60 +142,107 @@ def _enrich_article(article_id: int, topic_profile: str | None,
     from app.database import SessionLocal
     from app.services.ai.factory import get_ai_provider, wait_for_ai
     from app.services.ai.null import NullProvider
+    from app.services.scraper.base import fetch_og_image, resolve_article_url, _is_bad_redirect
 
     if not wait_for_ai(timeout=600):
         ai_log.info("Discovery held the AI for 10 min — proceeding anyway")
 
     from app.services.ai.stats import record_article
 
+    # ── Phase 1: read article (short-lived session, closed before AI work) ────
+    # Keeping the session open during AI calls (10-30 s) holds a SQLite
+    # transaction open and blocks every other writer → "database is locked".
     db = SessionLocal()
-    t_article_start = time.monotonic()
     try:
         article = db.get(Article, article_id)
         if not article or article.ai_enriched:
             return
-
         if is_enrichment_paused(article.tenant_id):
             ai_log.debug("Enrichment paused for tenant %d — skipping article %d",
                          article.tenant_id, article_id)
             return
+        # Snapshot the fields needed so the session can be closed immediately
+        a_title = article.title
+        a_excerpt = article.excerpt or ""
+        a_url = article.url
+        a_image_url = article.image_url
+        a_embedding = article.title_embedding
+    finally:
+        db.close()
 
-        ai = get_ai_provider()
-        if isinstance(ai, NullProvider):
-            return
-        title_short = article.title[:70]
+    ai = get_ai_provider()
+    if isinstance(ai, NullProvider):
+        return
 
+    title_short = a_title[:70]
+    t_article_start = time.monotonic()
+
+    # ── Phase 2: AI + HTTP work (no DB session held) ──────────────────────────
+    try:
+        result = ai.enrich_article(
+            a_title, a_excerpt,
+            topic_profile, categories or [],
+            accepted_languages=accepted_languages,
+            translation_language=translation_language,
+        )
+    except Exception as exc:
+        ai_log.warning("enrich_article failed for '%s': %s", title_short, exc)
+        return
+
+    if topic_profile:
+        ai_log.info("Relevance %.2f — '%s'%s",
+                    result.score, title_short,
+                    f" ({result.reason})" if result.reason else "")
+
+    # Resolve Google News redirect to the real URL (no DB access)
+    real_url = a_url
+    if a_url and "news.google.com" in a_url:
+        resolved = resolve_article_url(a_url)
+        if resolved != a_url and not _is_bad_redirect(resolved):
+            ai_log.debug("Resolved Google News URL for '%s': %s", title_short, resolved)
+            real_url = resolved
+
+    # Backfill missing image via og:image (HTTP fetch, no DB)
+    new_image: str | None = a_image_url
+    if not a_image_url and real_url:
+        img = fetch_og_image(real_url)
+        if img:
+            new_image = img
+            ai_log.debug("og:image found for '%s': %s", title_short, img)
+
+    # Backfill embedding if missing (AI call, no DB)
+    new_embedding_json: str | None = a_embedding
+    if not a_embedding:
         try:
-            result = ai.enrich_article(
-                article.title, article.excerpt or "",
-                topic_profile, categories or [],
-                accepted_languages=accepted_languages,
-                translation_language=translation_language,
-            )
-        except Exception as exc:
-            ai_log.warning("enrich_article failed for '%s': %s", title_short, exc)
+            emb = ai.embed(f"{a_title} {a_excerpt}"[:500])
+            if emb:
+                new_embedding_json = json.dumps(emb)
+        except Exception:
+            pass
+
+    # ── Phase 3: write results (fresh short-lived session) ────────────────────
+    db = SessionLocal()
+    try:
+        article = db.get(Article, article_id)
+        if not article:
+            return  # deleted between phases — nothing to do
+
+        if topic_profile and result.score < 0.5:
+            article_url = article.url
+            article_tenant_id = article.tenant_id
+            db.query(Article).filter(Article.id == article_id).delete()
+            # Remove from scraped_urls so re-scraping after profile changes works
+            db.query(ScrapedUrl).filter_by(
+                tenant_id=article_tenant_id, url=article_url
+            ).delete()
+            db.commit()
+            ai_log.info("Deleted low-relevance article (%.2f): '%s'",
+                        result.score, title_short)
             return
 
         if topic_profile:
-            ai_log.info("Relevance %.2f — '%s'%s",
-                        result.score, title_short,
-                        f" ({result.reason})" if result.reason else "")
-            if result.score < 0.5:
-                article_url = article.url
-                article_tenant_id = article.tenant_id
-                db.query(Article).filter(Article.id == article_id).delete()
-                # Also remove from scraped_urls so the article can be
-                # re-evaluated if the tenant's language/profile settings change.
-                db.query(ScrapedUrl).filter_by(
-                    tenant_id=article_tenant_id, url=article_url
-                ).delete()
-                db.commit()
-                ai_log.info("Deleted low-relevance article (%.2f): '%s'",
-                            result.score, title_short)
-                return
             article.relevance_score = result.score
             article.relevance_reason = result.reason
-
         if result.summary:
             article.summary = result.summary
         if result.translated_title:
@@ -203,29 +250,12 @@ def _enrich_article(article_id: int, topic_profile: str | None,
         article.category = result.category
         ai_log.info("Enriched '%s' → %s", title_short, result.category or "—")
 
-        # Resolve Google News redirect URLs to the real article URL
-        from app.services.scraper.base import fetch_og_image, resolve_article_url, _is_bad_redirect
-        if article.url and "news.google.com" in article.url:
-            real_url = resolve_article_url(article.url)
-            if real_url != article.url and not _is_bad_redirect(real_url):
-                ai_log.debug("Resolved Google News URL for '%s': %s", title_short, real_url)
-                article.url = real_url
-
-        # Backfill missing image via og:image
-        if not article.image_url and article.url:
-            img = fetch_og_image(article.url)
-            if img:
-                article.image_url = img
-                ai_log.debug("og:image found for '%s': %s", title_short, img)
-
-        # Backfill embedding if it wasn't generated at scrape time
-        if not article.title_embedding:
-            try:
-                emb = ai.embed(f"{article.title} {article.excerpt or ''}"[:500])
-                if emb:
-                    article.title_embedding = json.dumps(emb)
-            except Exception:
-                pass
+        if real_url != a_url:
+            article.url = real_url
+        if new_image and not article.image_url:
+            article.image_url = new_image
+        if new_embedding_json and not article.title_embedding:
+            article.title_embedding = new_embedding_json
 
         article.ai_enriched = True
         db.commit()
