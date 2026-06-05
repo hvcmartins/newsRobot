@@ -51,7 +51,7 @@ export default function RunHistoryPage() {
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
           <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← Prev</Button>
           <span style={{ fontSize: 13, color: '#666', padding: '5px 0' }}>Page {page}</span>
-          <Button variant="secondary" size="sm" disabled={(data.items.length < data.size)} onClick={() => setPage(p => p + 1)}>Next →</Button>
+          <Button variant="secondary" size="sm" disabled={page * data.size >= data.total} onClick={() => setPage(p => p + 1)}>Next →</Button>
         </div>
       )}
     </div>

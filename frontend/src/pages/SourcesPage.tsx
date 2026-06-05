@@ -191,6 +191,7 @@ export default function SourcesPage() {
   const [checkingAll, setCheckingAll] = useState(false)
   const [csvResult, setCsvResult] = useState<{ imported: number; skipped: number; errors: number; rows: CsvImportRows } | null>(null)
   const [csvUploading, setCsvUploading] = useState(false)
+  const [csvError, setCsvError] = useState<string | null>(null)
   const csvInputRef = useRef<HTMLInputElement>(null)
   const tenantId = activeTenant?.id ?? 0
 
@@ -210,12 +211,13 @@ export default function SourcesPage() {
     if (!file) return
     e.target.value = ''
     setCsvUploading(true)
+    setCsvError(null)
     try {
       const result = await sourceApi.importCsv(tenantId, file)
       qc.invalidateQueries({ queryKey: ['sources', tenantId] })
       setCsvResult(result)
-    } catch {
-      setCsvResult(null)
+    } catch (err: unknown) {
+      setCsvError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
       setCsvUploading(false)
     }
@@ -294,6 +296,17 @@ export default function SourcesPage() {
           <Button size="sm" onClick={() => setShowAdd(true)}>+ Add Custom Source</Button>
         </div>
       </div>
+
+      {csvError && (
+        <div style={{
+          background: '#fff1f0', border: '1px solid #ffa39e', borderRadius: 8,
+          padding: '10px 14px', fontSize: 13, color: '#cf1322',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span>CSV import failed: {csvError}</span>
+          <button onClick={() => setCsvError(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#cf1322', fontWeight: 700, fontSize: 15 }}>✕</button>
+        </div>
+      )}
 
       {showDiscover && tenantId > 0 && (
         <AIDiscoverDrawer tenantId={tenantId} onClose={() => setShowDiscover(false)} />

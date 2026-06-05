@@ -42,7 +42,11 @@ def run_monthly_digest(tenant_id: int, year: int, month: int, db: Session) -> bo
 
     # Collect archived articles from that month
     start = datetime.datetime(year, month, 1)
-    end = datetime.datetime(year, month, calendar.monthrange(year, month)[1], 23, 59, 59)
+    # Use start of next month minus 1µs to include all timestamps in the month
+    if month == 12:
+        end = datetime.datetime(year + 1, 1, 1) - datetime.timedelta(microseconds=1)
+    else:
+        end = datetime.datetime(year, month + 1, 1) - datetime.timedelta(microseconds=1)
     articles = (db.query(Article)
                 .filter(Article.tenant_id == tenant_id,
                         Article.archived_at >= start,

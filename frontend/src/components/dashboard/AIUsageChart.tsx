@@ -180,6 +180,7 @@ export default function AIUsageChart({ tenantId }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ['ai-usage', view, tenantId],
     queryFn: () => aiUsageApi.get(view, tenantId),
+    enabled: !!tenantId,
     refetchInterval: view === 'minute' ? 30_000 : 60_000,
   })
 

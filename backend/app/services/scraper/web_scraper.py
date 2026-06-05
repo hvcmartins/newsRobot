@@ -231,7 +231,10 @@ class WebScraper(AbstractScraper):
             resp = client.get(self.source_url, headers=_HEADERS)
             resp.raise_for_status()
 
-        soup = BeautifulSoup(resp.text, "lxml")
+        try:
+            soup = BeautifulSoup(resp.text, "lxml")
+        except Exception:
+            soup = BeautifulSoup(resp.text, "html.parser")
         page_date = _extract_page_date(soup)
         items = soup.select(self.css_selector)
         logger.debug("WebScraper '%s': %d items, page_date=%s",

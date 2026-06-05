@@ -64,6 +64,17 @@ export default function TenantSettingsPage() {
     if (activeTenant) {
       setForm({ ...activeTenant })
     }
+    // Reset all editing state so stale values from the previous tenant don't
+    // linger — especially deleteConfirm which could allow accidental deletion.
+    setEditingCatIdx(null)
+    setEditCatValue('')
+    setAddCatValue('')
+    setDragCatIdx(null)
+    setDragOverCatIdx(null)
+    setDeleteConfirm('')
+    setResetConfirm(null)
+    setSaved(false)
+    setSaveError(null)
   }, [activeTenant?.id])
 
   const set = (patch: Partial<Tenant>) => setForm((f) => ({ ...f, ...patch }))
