@@ -64,23 +64,27 @@ def delete_tenant(slug: str, db: Session = Depends(get_db)):
 
 @router.post("/{slug}/pause-scrape", response_model=TenantRead)
 def pause_scrape(slug: str, db: Session = Depends(get_db)):
+    from app.services.scraper.runner import pause_tenant_scraping
     tenant = db.query(Tenant).filter_by(slug=slug).first()
     if not tenant:
         raise HTTPException(404, "Tenant not found")
     tenant.scrape_paused = True
     db.commit()
     db.refresh(tenant)
+    pause_tenant_scraping(tenant.id)
     return tenant
 
 
 @router.post("/{slug}/resume-scrape", response_model=TenantRead)
 def resume_scrape(slug: str, db: Session = Depends(get_db)):
+    from app.services.scraper.runner import resume_tenant_scraping
     tenant = db.query(Tenant).filter_by(slug=slug).first()
     if not tenant:
         raise HTTPException(404, "Tenant not found")
     tenant.scrape_paused = False
     db.commit()
     db.refresh(tenant)
+    resume_tenant_scraping(tenant.id)
     return tenant
 
 

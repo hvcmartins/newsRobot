@@ -200,7 +200,26 @@ def refresh_tenant_job(tenant_id: int):
         db.close()
 
 
+def _sync_pause_state():
+    """Re-populate the in-memory scrape-pause set from DB so restarts preserve pause state."""
+    from app.database import SessionLocal
+    from app.models import Tenant
+    from app.services.scraper.runner import pause_tenant_scraping
+    db = SessionLocal()
+    try:
+        paused = db.query(Tenant.id).filter(Tenant.scrape_paused.is_(True)).all()
+        for (tid,) in paused:
+            pause_tenant_scraping(tid)
+        if paused:
+            logger.info("Restored scrape-pause state for %d tenant(s)", len(paused))
+    except Exception as exc:
+        logger.warning("Could not sync pause state: %s", exc)
+    finally:
+        db.close()
+
+
 def start_scheduler():
+    _sync_pause_state()
     load_tenant_jobs()
     scheduler.start()
     logger.info("APScheduler started")

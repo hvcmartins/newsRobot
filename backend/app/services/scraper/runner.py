@@ -19,8 +19,11 @@ logger = logging.getLogger(__name__)
 
 _enrich_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="enrich")
 
-_paused_tenants: set[int] = set()
+_paused_tenants: set[int] = set()   # enrichment pause
 _paused_lock = threading.Lock()
+
+_scrape_paused_tenants: set[int] = set()  # scraping pause
+_scrape_paused_lock = threading.Lock()
 
 # Track submitted (not-yet-started) futures per tenant so pause can cancel them
 _tenant_futures: dict[int, list[Future]] = {}
@@ -83,6 +86,23 @@ def resume_tenant_enrichment(tenant_id: int) -> None:
 def is_enrichment_paused(tenant_id: int) -> bool:
     with _paused_lock:
         return tenant_id in _paused_tenants
+
+
+def pause_tenant_scraping(tenant_id: int) -> None:
+    with _scrape_paused_lock:
+        _scrape_paused_tenants.add(tenant_id)
+    logger.info("Scraping paused for tenant %d", tenant_id)
+
+
+def resume_tenant_scraping(tenant_id: int) -> None:
+    with _scrape_paused_lock:
+        _scrape_paused_tenants.discard(tenant_id)
+    logger.info("Scraping resumed for tenant %d", tenant_id)
+
+
+def is_scraping_paused(tenant_id: int) -> bool:
+    with _scrape_paused_lock:
+        return tenant_id in _scrape_paused_tenants
 
 
 def _begin_scraping(tenant_id: int) -> None:
@@ -355,6 +375,8 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
     source: Source = db.get(Source, source_id)
     if not source or not source.is_active:
         raise ValueError(f"Source {source_id} not found or inactive")
+    if is_scraping_paused(source.tenant_id):
+        raise ValueError(f"Scraping is paused for tenant {source.tenant_id}")
 
     tenant: Tenant = db.get(Tenant, source.tenant_id)
     source_kws = json.loads(source.keywords or "[]")
@@ -442,6 +464,9 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         new_article_ids = []
 
         for art, new_embedding in zip(candidates, pre_embeddings):
+            if is_scraping_paused(source.tenant_id):
+                logger.info("Scraping paused mid-run — stopping at article '%s'", art.title[:60])
+                break
             dup_id = _is_near_duplicate(art, recent, ai, new_embedding)
             score = _keyword_relevance(art, keywords)
 
@@ -530,6 +555,10 @@ def run_all_sources(tenant_id: int, db: Session) -> list[ScrapeRun]:
         }
     runs = []
     for source in sources:
+        if is_scraping_paused(tenant_id):
+            logger.info("Scraping paused — stopping after %d/%d sources for tenant %d",
+                        len(runs), len(sources), tenant_id)
+            break
         run = run_source(source.id, db)
         runs.append(run)
         with _scrape_lock:

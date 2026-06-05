@@ -65,7 +65,15 @@ def _do_source_scrape(source_id: int):
 
 
 @router.post("/trigger")
-def trigger_full_scrape(tenant_id: int, background_tasks: BackgroundTasks):
+def trigger_full_scrape(tenant_id: int, background_tasks: BackgroundTasks,
+                        db: Session = Depends(get_db)):
+    from app.models import Tenant
+    from app.services.scraper.runner import is_scraping_paused
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(404, "Tenant not found")
+    if is_scraping_paused(tenant_id) or getattr(tenant, 'scrape_paused', False):
+        raise HTTPException(409, "Scraping is paused for this tenant")
     background_tasks.add_task(_do_full_scrape, tenant_id)
     return {"status": "triggered", "tenant_id": tenant_id}
 
@@ -73,8 +81,12 @@ def trigger_full_scrape(tenant_id: int, background_tasks: BackgroundTasks):
 @router.post("/trigger/{source_id}")
 def trigger_source_scrape(source_id: int, background_tasks: BackgroundTasks,
                            db: Session = Depends(get_db)):
-    source = db.get(__import__("app.models", fromlist=["Source"]).Source, source_id)
+    from app.models import Source
+    from app.services.scraper.runner import is_scraping_paused
+    source = db.get(Source, source_id)
     if not source:
         raise HTTPException(404, "Source not found")
+    if is_scraping_paused(source.tenant_id):
+        raise HTTPException(409, "Scraping is paused for this tenant")
     background_tasks.add_task(_do_source_scrape, source_id)
     return {"status": "triggered", "source_id": source_id}
