@@ -30,6 +30,11 @@ _futures_lock = threading.Lock()
 _scrape_state: dict[int, dict] = {}
 _scrape_lock = threading.Lock()
 
+# Per-tenant active-scrape counter.  Enrichment tasks check this before their
+# write phase so they don't compete for the SQLite write lock with the scraper.
+_scraping_tenants: dict[int, int] = {}
+_scraping_cond = threading.Condition(threading.Lock())
+
 
 def get_scrape_status(tenant_id: int) -> dict:
     with _scrape_lock:
@@ -78,6 +83,36 @@ def resume_tenant_enrichment(tenant_id: int) -> None:
 def is_enrichment_paused(tenant_id: int) -> bool:
     with _paused_lock:
         return tenant_id in _paused_tenants
+
+
+def _begin_scraping(tenant_id: int) -> None:
+    with _scraping_cond:
+        _scraping_tenants[tenant_id] = _scraping_tenants.get(tenant_id, 0) + 1
+    logger.info("Scraping started for tenant %d (active runs: %d)",
+                tenant_id, _scraping_tenants[tenant_id])
+
+
+def _end_scraping(tenant_id: int) -> None:
+    with _scraping_cond:
+        count = _scraping_tenants.get(tenant_id, 0)
+        if count > 1:
+            _scraping_tenants[tenant_id] = count - 1
+        else:
+            _scraping_tenants.pop(tenant_id, None)
+        _scraping_cond.notify_all()
+    logger.info("Scraping ended for tenant %d", tenant_id)
+
+
+def _wait_for_scraping(tenant_id: int, timeout: float = 120) -> None:
+    """Block until no scrape is active for this tenant (or timeout expires)."""
+    with _scraping_cond:
+        if not _scraping_cond.wait_for(
+            lambda: not _scraping_tenants.get(tenant_id, 0), timeout=timeout
+        ):
+            logger.warning(
+                "Enrichment for tenant %d waited %.0fs for scrape to finish — proceeding anyway",
+                tenant_id, timeout,
+            )
 
 
 def _keyword_relevance(article: ScrapedArticle, keywords: list[str]) -> float:
@@ -265,6 +300,12 @@ def _enrich_article(article_id: int, topic_profile: str | None,
             pass
 
     # ── Phase 3: write results (fresh short-lived session) ────────────────────
+    # Wait for any active scrape to finish before opening a write transaction.
+    # Concurrent scrape + enrichment writes both need the SQLite write lock;
+    # the scrape's bulk-insert loop holds it for much longer than a single
+    # enrichment write, so the enrichment task defers.
+    _wait_for_scraping(a_tenant_id)
+
     db = SessionLocal()
     try:
         article = db.get(Article, article_id)
@@ -316,7 +357,6 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         raise ValueError(f"Source {source_id} not found or inactive")
 
     tenant: Tenant = db.get(Tenant, source.tenant_id)
-
     source_kws = json.loads(source.keywords or "[]")
     global_kws = json.loads(tenant.global_keywords or "[]")
     keywords = source_kws if source_kws else global_kws
@@ -332,7 +372,7 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
     db.refresh(run)
 
     logger.info("Scraping '%s' [%s]", source.name, source.type.value.upper())
-
+    _begin_scraping(source.tenant_id)
     try:
         if source.type == SourceType.rss:
             scraper = RssScraper(source.url, source.name)
@@ -474,6 +514,8 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         run.error_message = str(exc)
         run.completed_at = datetime.datetime.utcnow()
         db.commit()
+    finally:
+        _end_scraping(source.tenant_id)
 
     return run
 
