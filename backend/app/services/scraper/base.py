@@ -76,8 +76,25 @@ def _decode_google_news_url(google_url: str) -> str | None:
     return None
 
 
-def _extract_og_image_from_soup(soup: BeautifulSoup) -> str | None:
+def _extract_og_image_from_soup(soup: BeautifulSoup,
+                                base_url: str | None = None) -> str | None:
     """Return the best image URL from og:image / twitter:image / JSON-LD."""
+    from urllib.parse import urljoin
+
+    def _resolve(raw: str) -> str | None:
+        raw = raw.strip()
+        if not raw:
+            return None
+        if raw.startswith("//"):          # protocol-relative
+            raw = "https:" + raw
+        elif raw.startswith("/") and base_url:  # site-relative
+            raw = urljoin(base_url, raw)
+        if not raw.startswith("http"):
+            return None
+        if "placeholder" in raw.lower():
+            return None
+        return raw
+
     for prop, attr in [
         ("og:image", "property"),
         ("og:image:secure_url", "property"),
@@ -86,9 +103,9 @@ def _extract_og_image_from_soup(soup: BeautifulSoup) -> str | None:
     ]:
         tag = soup.find("meta", attrs={attr: prop})
         if tag:
-            content = tag.get("content", "").strip()
-            if content and content.startswith("http") and "placeholder" not in content.lower():
-                return content
+            resolved = _resolve(tag.get("content", ""))
+            if resolved:
+                return resolved
 
     for script in soup.find_all("script", type="application/ld+json"):
         try:
@@ -98,20 +115,24 @@ def _extract_og_image_from_soup(soup: BeautifulSoup) -> str | None:
                 if not isinstance(item, dict):
                     continue
                 img = item.get("image")
-                if isinstance(img, str) and img.startswith("http"):
-                    return img
+                if isinstance(img, str):
+                    resolved = _resolve(img)
+                    if resolved:
+                        return resolved
                 if isinstance(img, dict):
-                    val = img.get("url", "")
-                    if val.startswith("http"):
-                        return val
+                    resolved = _resolve(img.get("url", ""))
+                    if resolved:
+                        return resolved
                 if isinstance(img, list) and img:
                     first = img[0]
-                    if isinstance(first, str) and first.startswith("http"):
-                        return first
+                    if isinstance(first, str):
+                        resolved = _resolve(first)
+                        if resolved:
+                            return resolved
                     if isinstance(first, dict):
-                        val = first.get("url", "")
-                        if val.startswith("http"):
-                            return val
+                        resolved = _resolve(first.get("url", ""))
+                        if resolved:
+                            return resolved
         except Exception:
             pass
     return None
@@ -161,42 +182,27 @@ def fetch_og_image(url: str, timeout: int = 10) -> str | None:
     """Fetch an article URL and extract the best available image.
 
     Handles Google News redirect URLs by decoding the real URL first.
-    Falls back to fetching the Google News page itself if URL resolution
-    fails, since Google sometimes embeds og:image in the news card HTML.
+    When decode fails, follows HTTP redirects to reach the real article.
+    Skips raise_for_status so paywalled pages that include og:image in
+    their 4xx HTML are still parsed.
     """
     if _GOOGLE_NEWS_RE.search(url):
         real = resolve_article_url(url, timeout)
-        if real == url:
-            # Decode failed — try fetching the Google News page itself and
-            # extracting og:image from the HTML (works for some article formats)
-            try:
-                with httpx.Client(timeout=timeout, follow_redirects=False) as client:
-                    resp = client.get(url, headers=_BROWSER_HEADERS)
-                soup = BeautifulSoup(resp.text, "html.parser")
-                img = _extract_og_image_from_soup(soup)
-                if img:
-                    return img
-                # Also check if the page redirected us to the real article
-                og_url_tag = soup.find("meta", attrs={"property": "og:url"})
-                if og_url_tag:
-                    target = og_url_tag.get("content", "").strip()
-                    if target.startswith("http") and not _GOOGLE_NEWS_RE.search(target):
-                        url = target  # fall through to normal fetch below
-                    else:
-                        return None
-                else:
-                    return None
-            except Exception as exc:
-                logger.debug("fetch_og_image Google News page fetch failed for %s: %s", url, exc)
-                return None
-        else:
+        if real != url:
             url = real
+        # If decode/resolution still stuck on Google News, fall through and
+        # follow redirects — the HTTP GET may land on the real article.
 
     try:
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
             resp = client.get(url, headers=_BROWSER_HEADERS)
-            resp.raise_for_status()
-        return _extract_og_image_from_soup(BeautifulSoup(resp.text, "html.parser"))
+        final_url = str(resp.url)
+        if _is_bad_redirect(final_url):
+            logger.debug("fetch_og_image: bad redirect to %s — skipping", final_url)
+            return None
+        return _extract_og_image_from_soup(
+            BeautifulSoup(resp.text, "html.parser"), base_url=final_url
+        )
     except Exception as exc:
         logger.debug("fetch_og_image failed for %s: %s", url, exc)
     return None
