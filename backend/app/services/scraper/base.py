@@ -45,34 +45,48 @@ _GOOGLE_NEWS_RE = re.compile(r'https?://news\.google\.com/', re.I)
 
 
 def _decode_google_news_url(google_url: str) -> str | None:
-    """Extract the real article URL from a Google News URL by decoding its base64 payload.
+    """Fast decode of a Google News URL using local base64 parsing only.
 
-    Google News encodes the target URL as a protobuf message in the URL path.
-    Handles both /articles/ and /read/ path formats. No HTTP request needed.
+    Works for older token formats where the URL is stored as plaintext inside
+    the protobuf payload.  Returns None for newer encrypted tokens — callers
+    that can afford HTTP requests should use resolve_article_url() instead.
     """
-    # Match either /articles/<token> or /read/<token>
     match = re.search(r'/(?:articles|read)/([A-Za-z0-9_-]+)', google_url)
     if not match:
         return None
-    encoded = match.group(1)
-    encoded += '=' * (-len(encoded) % 4)
+    encoded = match.group(1) + '=' * (-len(match.group(1)) % 4)
     try:
         data = base64.urlsafe_b64decode(encoded)
-        # The real URL is a UTF-8 string embedded in a protobuf message.
-        # Scan for the http prefix rather than parsing protobuf fields.
         text = data.decode('latin-1')
         for prefix in ('https://', 'http://'):
             idx = text.find(prefix)
             if idx >= 0:
                 url = text[idx:]
-                # Strip binary garbage after the URL: non-ASCII or control chars
                 url = re.sub(r'[\x00-\x1f\x7f-\xff].*', '', url)
-                # Also strip anything after a space (protobuf field separators)
                 url = url.split()[0] if url else url
                 if url.startswith('http') and '.' in url:
                     return url
+    except Exception:
+        pass
+    return None
+
+
+def _decode_google_news_url_api(google_url: str) -> str | None:
+    """Decode a Google News URL via Google's own batchexecute API.
+
+    Makes 2 HTTP requests — use this during async enrichment, not during
+    synchronous RSS scraping where speed matters.
+    """
+    try:
+        from googlenewsdecoder import new_decoderv1
+        result = new_decoderv1(google_url)
+        if result.get('status') and result.get('decoded_url'):
+            decoded = result['decoded_url']
+            if decoded.startswith('http') and not _GOOGLE_NEWS_RE.search(decoded):
+                return decoded
+            logger.debug("_decode_google_news_url_api: bad URL returned: %s", decoded)
     except Exception as exc:
-        logger.debug("_decode_google_news_url failed for %s: %s", google_url, exc)
+        logger.debug("_decode_google_news_url_api failed: %s", exc)
     return None
 
 
@@ -139,11 +153,12 @@ def _extract_og_image_from_soup(soup: BeautifulSoup,
 
 
 def resolve_article_url(url: str, timeout: int = 10) -> str:
-    """Return the real article URL, resolving Google News redirect URLs.
+    """Return the real article URL for a Google News redirect URL.
 
-    Fast path: decode the real URL from the base64 payload in the URL path —
-    no HTTP request needed.  Falls back to HTTP redirect-following if the decode
-    fails.  Always returns a non-empty string (original URL on failure).
+    Resolution order:
+    1. Fast local base64 decode (works for older token formats, no HTTP)
+    2. googlenewsdecoder API (2 HTTP requests — handles current encrypted tokens)
+    Always returns a non-empty string (original URL on failure).
     """
     if not _GOOGLE_NEWS_RE.search(url):
         return url
@@ -152,28 +167,9 @@ def resolve_article_url(url: str, timeout: int = 10) -> str:
     if decoded:
         return decoded
 
-    # Fallback: follow HTTP redirects
-    try:
-        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-            resp = client.get(url, headers=_BROWSER_HEADERS)
-            resp.raise_for_status()
-        final_url = str(resp.url)
-        if not _GOOGLE_NEWS_RE.search(final_url) and not _is_bad_redirect(final_url):
-            return final_url
-        soup = BeautifulSoup(resp.text, "html.parser")
-        for prop, attr in [("og:url", "property"), ("og:url", "name")]:
-            tag = soup.find("meta", attrs={attr: prop})
-            if tag:
-                content = tag.get("content", "").strip()
-                if content and content.startswith("http") and not _GOOGLE_NEWS_RE.search(content):
-                    return content
-        canonical = soup.find("link", rel="canonical")
-        if canonical:
-            href = canonical.get("href", "").strip()
-            if href and href.startswith("http") and not _GOOGLE_NEWS_RE.search(href):
-                return href
-    except Exception as exc:
-        logger.debug("resolve_article_url HTTP fallback failed for %s: %s", url, exc)
+    decoded = _decode_google_news_url_api(url)
+    if decoded:
+        return decoded
 
     return url
 
