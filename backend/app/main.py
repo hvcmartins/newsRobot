@@ -40,8 +40,9 @@ app = FastAPI(title="NewsRobot API", version="1.0.0", lifespan=lifespan, redirec
 origins = [o.strip() for o in settings.cors_origins.split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins if origins != ["*"] else ["*"],
-    allow_credentials=True,
+    allow_origins=origins,
+    # Browsers reject allow_credentials=True with wildcard origins
+    allow_credentials=origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

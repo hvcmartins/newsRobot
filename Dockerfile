@@ -2,7 +2,7 @@
 FROM node:20-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci --prefer-offline 2>/dev/null || npm install
+RUN npm ci
 COPY frontend/ .
 RUN npm run build
 
@@ -38,4 +38,4 @@ ENV DATABASE_URL=sqlite:////data/newsrobot.db \
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "[ -f /data/.initialized ] || (python -m app.seed && touch /data/.initialized); uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]

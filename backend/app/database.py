@@ -10,8 +10,10 @@ engine = create_engine(
         "timeout": 30,          # wait up to 30s for SQLite write lock
     },
     echo=settings.debug,
-    pool_size=10,
-    max_overflow=20,
+    # SQLite serialises all writes at the file level; a large pool just queues
+    # threads waiting for the lock rather than giving real parallelism.
+    pool_size=5,
+    max_overflow=10,
     pool_timeout=60,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -71,7 +73,21 @@ def _migrate():
     _add_column_if_missing("email_configs", "yearly_digest_time", "VARCHAR(5) DEFAULT '08:00'")
     _add_column_if_missing("email_configs", "send_days", "TEXT")
     _add_column_if_missing("email_configs", "max_articles_per_digest", "INTEGER")
+    # Indexes for columns added after initial schema creation
+    _ensure_index("articles", "ai_enriched")
+    _ensure_index("articles", "is_read")
+    _ensure_index("articles", "archived_at")
+    _ensure_index("articles", "scraped_at")
     _fix_empty_slugs()
+
+
+def _ensure_index(table: str, column: str) -> None:
+    index_name = f"ix_{table}_{column}"
+    with engine.connect() as conn:
+        conn.execute(text(
+            f"CREATE INDEX IF NOT EXISTS {index_name} ON {table}({column})"
+        ))
+        conn.commit()
 
 
 def _fix_empty_slugs() -> None:

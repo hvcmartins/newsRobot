@@ -155,11 +155,11 @@ def send_digest_if_configured(tenant_id: int, articles,
 
 
 def send_narrative_digest(tenant_id: int, digest_type: str, summary_text: str,
-                           label: str, db: Session) -> bool:
-    """Send a monthly or yearly narrative digest email."""
+                           label: str, db: Session) -> int | None:
+    """Send a monthly or yearly narrative digest email. Returns SentDigest ID or None."""
     context = build_narrative_context(tenant_id, digest_type, summary_text, db, label)
     if not context:
-        return False
+        return None
     html, text = render_narrative_email(context)
     try:
         send_email_raw(
@@ -170,8 +170,7 @@ def send_narrative_digest(tenant_id: int, digest_type: str, summary_text: str,
             recipients=context["recipients"],
         )
         logger.info("Narrative %s digest sent for tenant %d", digest_type, tenant_id)
-        _create_sent_digest(tenant_id, context["subject"], 0, digest_type, db)
-        return True
+        return _create_sent_digest(tenant_id, context["subject"], 0, digest_type, db)
     except Exception as exc:
         logger.error("Narrative email send failed for tenant %d: %s", tenant_id, exc)
         raise

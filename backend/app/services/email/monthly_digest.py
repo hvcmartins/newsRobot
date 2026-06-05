@@ -88,18 +88,18 @@ def run_monthly_digest(tenant_id: int, year: int, month: int, db: Session) -> bo
     db.refresh(ms)
 
     # Send email
-    sent = send_narrative_digest(
+    sent_digest_id = send_narrative_digest(
         tenant_id=tenant_id,
         digest_type="monthly",
         summary_text=summary_text,
         label=month_label,
         db=db,
     )
-    if sent:
-        ms.digest_id = ms.id  # self-reference updated after send
+    if sent_digest_id:
+        ms.digest_id = sent_digest_id
         db.commit()
 
-    return sent
+    return bool(sent_digest_id)
 
 
 def run_yearly_digest(tenant_id: int, year: int, db: Session) -> bool:

@@ -7,6 +7,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+from sqlalchemy.exc import IntegrityError
 from app.database import create_tables, SessionLocal
 from app.models import CatalogSource, Tenant, Source, CatalogSourceType, SourceType
 
@@ -127,8 +128,11 @@ def seed():
                     is_verified=True,
                 )
                 db.add(cs)
-                added += 1
-        db.commit()
+                try:
+                    db.commit()
+                    added += 1
+                except IntegrityError:
+                    db.rollback()
         print(f"Catalog: added {added} sources ({len(CATALOG) - added} already present)")
 
         # Seed demo tenants

@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 from app.models.email_config import EmailFrequency
 from .base import ORMBase, UTCDatetime
 
@@ -63,6 +63,10 @@ class EmailConfigUpdate(BaseModel):
 
 class EmailConfigRead(EmailConfigBase, ORMBase):
     id: int
-    smtp_password: Optional[str] = None  # masked in responses
+    smtp_password: Optional[str] = None
     created_at: UTCDatetime
     updated_at: UTCDatetime
+
+    @field_serializer('smtp_password')
+    def mask_smtp_password(self, v: Optional[str]) -> Optional[str]:
+        return '***' if v else None

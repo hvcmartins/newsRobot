@@ -61,8 +61,8 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
       await sourceApi.scrapeNow(id)
       setScraped((prev) => new Set([...prev, id]))
       qc.invalidateQueries({ queryKey: ['sources', tenantId] })
-      qc.invalidateQueries({ queryKey: ['articles'] })
-      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      qc.invalidateQueries({ queryKey: ['articles', tenantId] })
+      qc.invalidateQueries({ queryKey: ['dashboard', tenantId] })
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : 'Scrape failed')
     } finally {

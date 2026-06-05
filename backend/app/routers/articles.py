@@ -2,7 +2,7 @@ import math
 from typing import Optional
 import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models import Article
@@ -26,6 +26,7 @@ def list_articles(
     db: Session = Depends(get_db),
 ):
     q = (db.query(Article)
+         .options(joinedload(Article.source))
          .filter(Article.tenant_id == tenant_id,
                  Article.duplicate_of_id.is_(None)))
 
