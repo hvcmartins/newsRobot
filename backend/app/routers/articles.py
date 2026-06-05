@@ -187,16 +187,13 @@ def dashboard(tenant_id: int, db: Session = Depends(get_db)):
                            .filter_by(tenant_id=tenant_id)
                            .first())
     next_send = None
-    if config and config.is_active and config.send_time:
-        try:
-            h, m = map(int, config.send_time.split(":"))
-            now = datetime.datetime.utcnow()
-            candidate = now.replace(hour=h, minute=m, second=0, microsecond=0)
-            if candidate <= now:
-                candidate += datetime.timedelta(days=1)
-            next_send = candidate.replace(tzinfo=datetime.timezone.utc).isoformat()
-        except Exception:
-            pass
+    try:
+        from app.services.scheduler import scheduler
+        job = scheduler.get_job(f"email_{tenant_id}")
+        if job and job.next_run_time:
+            next_send = job.next_run_time.isoformat()
+    except Exception:
+        pass
 
     recent_runs = (db.query(ScrapeRun)
                    .filter_by(tenant_id=tenant_id)
