@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTenant } from '@/contexts/TenantContext'
-import { sourceApi, type SourceCheckResult } from '@/api/sources'
+import { sourceApi, type SourceCheckResult, type CsvImportRows } from '@/api/sources'
 import { catalogApi, type DiscoveredSource } from '@/api/catalog'
 import SourceList from '@/components/sources/SourceList'
 import SourceForm from '@/components/sources/SourceForm'
@@ -189,6 +189,9 @@ export default function SourcesPage() {
   const [showDiscover, setShowDiscover] = useState(false)
   const [checkResults, setCheckResults] = useState<Map<number, SourceCheckResult> | null>(null)
   const [checkingAll, setCheckingAll] = useState(false)
+  const [csvResult, setCsvResult] = useState<{ imported: number; skipped: number; errors: number; rows: CsvImportRows } | null>(null)
+  const [csvUploading, setCsvUploading] = useState(false)
+  const csvInputRef = useRef<HTMLInputElement>(null)
   const tenantId = activeTenant?.id ?? 0
 
   const { data: sources = [], isLoading } = useQuery({
@@ -201,6 +204,32 @@ export default function SourcesPage() {
     mutationFn: sourceApi.create,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sources', tenantId] }),
   })
+
+  const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setCsvUploading(true)
+    try {
+      const result = await sourceApi.importCsv(tenantId, file)
+      qc.invalidateQueries({ queryKey: ['sources', tenantId] })
+      setCsvResult(result)
+    } catch {
+      setCsvResult(null)
+    } finally {
+      setCsvUploading(false)
+    }
+  }
+
+  const downloadCsvTemplate = () => {
+    const csv = 'Name,URL,Type,CSS Selector\nTechCrunch,https://techcrunch.com/feed/,rss,\nExample Site,https://example.com/news,scrape,article.post\n'
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'sources-template.csv'
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
 
   const handleCheckAll = async () => {
     setCheckingAll(true)
@@ -246,6 +275,22 @@ export default function SourcesPage() {
           <Link to="/source-library">
             <Button variant="secondary" size="sm">📚 Browse Library</Button>
           </Link>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={csvUploading}
+            onClick={() => csvInputRef.current?.click()}
+            disabled={!tenantId}
+          >
+            📥 Import CSV
+          </Button>
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            style={{ display: 'none' }}
+            onChange={handleCsvUpload}
+          />
           <Button size="sm" onClick={() => setShowAdd(true)}>+ Add Custom Source</Button>
         </div>
       </div>
@@ -271,6 +316,105 @@ export default function SourcesPage() {
           onSave={async (data) => { await createMut.mutateAsync(data) }}
           onClose={() => setShowAdd(false)}
         />
+      )}
+
+      {csvResult && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 12, padding: 28, width: 480, maxWidth: '90vw',
+            maxHeight: '80vh', overflow: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+          }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 17, fontWeight: 700 }}>CSV Import Results</h3>
+
+            <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+              {[
+                { label: 'Imported', value: csvResult.imported, color: '#22c55e' },
+                { label: 'Skipped (duplicate)', value: csvResult.skipped, color: '#f59e0b' },
+                { label: 'Errors', value: csvResult.errors, color: '#ef4444' },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{
+                  flex: 1, textAlign: 'center', padding: '12px 8px',
+                  background: '#f9f9f9', borderRadius: 8, border: `1px solid #eee`,
+                }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {csvResult.rows.imported.length > 0 && (
+              <details open style={{ marginBottom: 12 }}>
+                <summary style={{ fontSize: 12, fontWeight: 600, color: '#22c55e', cursor: 'pointer', marginBottom: 6 }}>
+                  ✓ Imported ({csvResult.rows.imported.length})
+                </summary>
+                <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+                  {csvResult.rows.imported.map((r, i) => (
+                    <div key={i} style={{ padding: '4px 8px', background: '#f0fdf4', borderRadius: 4 }}>
+                      <strong>{r.name}</strong> <span style={{ color: '#888' }}>({r.type})</span>
+                      <div style={{ color: '#555', fontSize: 11, marginTop: 1 }}>{r.url}</div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            {csvResult.rows.skipped.length > 0 && (
+              <details style={{ marginBottom: 12 }}>
+                <summary style={{ fontSize: 12, fontWeight: 600, color: '#f59e0b', cursor: 'pointer', marginBottom: 6 }}>
+                  ⚠ Skipped — URL already exists ({csvResult.rows.skipped.length})
+                </summary>
+                <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+                  {csvResult.rows.skipped.map((r, i) => (
+                    <div key={i} style={{ padding: '4px 8px', background: '#fffbeb', borderRadius: 4 }}>
+                      Row {r.row}: <strong>{r.name}</strong>
+                      <div style={{ color: '#555', fontSize: 11 }}>{r.url}</div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            {csvResult.rows.errors.length > 0 && (
+              <details style={{ marginBottom: 12 }}>
+                <summary style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', cursor: 'pointer', marginBottom: 6 }}>
+                  ✗ Errors ({csvResult.rows.errors.length})
+                </summary>
+                <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+                  {csvResult.rows.errors.map((r, i) => (
+                    <div key={i} style={{ padding: '4px 8px', background: '#fef2f2', borderRadius: 4 }}>
+                      Row {r.row}{r.name ? `: ${r.name}` : ''} — {r.error}
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button
+                onClick={downloadCsvTemplate}
+                style={{
+                  padding: '8px 14px', borderRadius: 6, border: '1px solid #ddd',
+                  background: '#fff', cursor: 'pointer', fontSize: 12, color: '#555',
+                }}
+              >
+                📄 Download template
+              </button>
+              <button
+                onClick={() => setCsvResult(null)}
+                style={{
+                  marginLeft: 'auto', padding: '8px 20px', borderRadius: 6,
+                  border: 'none', background: 'var(--brand-color)', color: '#fff',
+                  cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

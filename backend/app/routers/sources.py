@@ -2,7 +2,7 @@ import datetime
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -28,6 +28,77 @@ def create_source(data: SourceCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(source)
     return source
+
+
+@router.post("/import-csv")
+async def import_csv_sources(
+    tenant_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Bulk-import sources from a CSV file with columns: Name, URL, Type.
+
+    Type must be 'rss' or 'scrape' (case-insensitive; defaults to 'rss').
+    An optional 'CSS Selector' column is used for type=scrape sources.
+    Rows with duplicate URLs (already present for this tenant) are skipped.
+    """
+    import csv
+    import io
+    from app.models.source import SourceType
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")  # strip BOM added by Excel
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise HTTPException(400, "CSV file appears to be empty or has no header row")
+
+    imported: list[dict] = []
+    skipped: list[dict] = []
+    errors: list[dict] = []
+
+    for row_num, row in enumerate(reader, start=2):  # row 1 is the header
+        norm = {k.lower().strip(): (v or "").strip() for k, v in row.items() if k}
+        name = norm.get("name", "")
+        url = norm.get("url", "")
+        type_str = norm.get("type", "rss").lower()
+        css = norm.get("css selector", "") or norm.get("css_selector", "")
+
+        if not name or not url:
+            errors.append({"row": row_num, "error": "Missing Name or URL"})
+            continue
+        if not url.startswith("http"):
+            errors.append({"row": row_num, "name": name, "error": f"Invalid URL: {url}"})
+            continue
+
+        src_type = SourceType.scrape if "scrape" in type_str else SourceType.rss
+
+        if db.query(Source).filter_by(tenant_id=tenant_id, url=url).first():
+            skipped.append({"row": row_num, "name": name, "url": url})
+            continue
+
+        db.add(Source(
+            tenant_id=tenant_id,
+            name=name,
+            url=url,
+            type=src_type,
+            css_selector=css or None,
+            is_active=True,
+        ))
+        imported.append({"name": name, "url": url, "type": src_type.value})
+
+    db.commit()
+    logger.info("CSV import for tenant %d: %d imported, %d skipped, %d errors",
+                tenant_id, len(imported), len(skipped), len(errors))
+    return {
+        "imported": len(imported),
+        "skipped": len(skipped),
+        "errors": len(errors),
+        "rows": {"imported": imported, "skipped": skipped, "errors": errors},
+    }
 
 
 @router.get("/{source_id}", response_model=SourceRead)
