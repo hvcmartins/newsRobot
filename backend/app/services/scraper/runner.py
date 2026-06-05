@@ -69,7 +69,7 @@ def _is_near_duplicate(article: ScrapedArticle, recent_articles: list[Article],
         ratio = _title_similarity(article.title, existing.title)
         if ratio >= 0.85:
             return existing.id
-        if 0.60 <= ratio < 0.85:
+        if 0.40 <= ratio < 0.85:
             try:
                 if ai_provider.are_duplicates(
                     article.title, article.excerpt or "",
@@ -233,10 +233,14 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         run.articles_found = len(articles)
         logger.info("Fetched %d article(s) from '%s'", len(articles), source.name)
 
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
+        # 72h window catches the same story covered by different providers
+        # over a multi-day news cycle. Exclude articles already flagged as
+        # duplicates so we don't chain A→dup(A)→dup(dup(A)).
+        dup_cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=72)
         recent = (db.query(Article)
                   .filter(Article.tenant_id == source.tenant_id,
-                          Article.scraped_at >= cutoff)
+                          Article.scraped_at >= dup_cutoff,
+                          Article.duplicate_of_id.is_(None))
                   .all())
 
         from app.services.ai.factory import get_ai_provider
