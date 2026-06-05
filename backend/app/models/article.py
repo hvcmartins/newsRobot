@@ -28,6 +28,7 @@ class Article(Base):
     is_read = Column(Boolean, default=False, nullable=False)
     ai_enriched = Column(Boolean, default=False, nullable=False)
     duplicate_of_id = Column(Integer, ForeignKey("articles.id"), nullable=True)
+    title_embedding = Column(Text, nullable=True)  # JSON-serialised float list
     # Queue / archive lifecycle
     archived_at = Column(DateTime, nullable=True)   # null = in queue, set = archived
     digest_id = Column(Integer, ForeignKey("sent_digests.id", ondelete="SET NULL"),

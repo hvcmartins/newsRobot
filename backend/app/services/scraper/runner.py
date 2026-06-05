@@ -64,20 +64,48 @@ def _title_similarity(t1: str, t2: str) -> float:
 
 
 def _is_near_duplicate(article: ScrapedArticle, recent_articles: list[Article],
-                        ai_provider) -> int | None:
+                        ai_provider, new_embedding: list[float] | None = None) -> int | None:
+    import json as _json
+    from app.services.ai.base import cosine_similarity
+
     for existing in recent_articles:
-        ratio = _title_similarity(article.title, existing.title)
-        if ratio >= 0.85:
-            return existing.id
-        if 0.40 <= ratio < 0.85:
+        # Prefer semantic similarity when both articles have embeddings
+        existing_emb: list[float] | None = None
+        if new_embedding and existing.title_embedding:
             try:
-                if ai_provider.are_duplicates(
-                    article.title, article.excerpt or "",
-                    existing.title, existing.excerpt or ""
-                ):
-                    return existing.id
-            except Exception as exc:
-                logger.warning("AI duplicate check failed: %s", exc)
+                existing_emb = _json.loads(existing.title_embedding)
+            except Exception:
+                pass
+
+        if new_embedding and existing_emb:
+            sim = cosine_similarity(new_embedding, existing_emb)
+            if sim >= 0.92:
+                logger.debug("Embedding duplicate (%.3f): '%s'", sim, article.title[:60])
+                return existing.id
+            if sim >= 0.80:
+                try:
+                    if ai_provider.are_duplicates(
+                        article.title, article.excerpt or "",
+                        existing.title, existing.excerpt or "",
+                    ):
+                        return existing.id
+                except Exception as exc:
+                    logger.warning("AI duplicate check failed: %s", exc)
+            # sim < 0.80 → not a duplicate; no need to check string similarity too
+        else:
+            # Fallback: string similarity (no embeddings available)
+            ratio = _title_similarity(article.title, existing.title)
+            if ratio >= 0.85:
+                return existing.id
+            if 0.40 <= ratio < 0.85:
+                try:
+                    if ai_provider.are_duplicates(
+                        article.title, article.excerpt or "",
+                        existing.title, existing.excerpt or "",
+                    ):
+                        return existing.id
+                except Exception as exc:
+                    logger.warning("AI duplicate check failed: %s", exc)
     return None
 
 
@@ -190,6 +218,15 @@ def _enrich_article(article_id: int, topic_profile: str | None,
                 article.image_url = img
                 ai_log.debug("og:image found for '%s': %s", title_short, img)
 
+        # Backfill embedding if it wasn't generated at scrape time
+        if not article.title_embedding:
+            try:
+                emb = ai.embed(f"{article.title} {article.excerpt or ''}"[:500])
+                if emb:
+                    article.title_embedding = json.dumps(emb)
+            except Exception:
+                pass
+
         article.ai_enriched = True
         db.commit()
         record_article(time.monotonic() - t_article_start)
@@ -274,7 +311,14 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
                 url_skipped += 1
                 continue
 
-            dup_id = _is_near_duplicate(art, recent, ai)
+            # Generate embedding for semantic dedup (falls back to [] on failure)
+            new_embedding: list[float] = []
+            try:
+                new_embedding = ai.embed(f"{art.title} {art.excerpt or ''}"[:500])
+            except Exception as exc:
+                logger.debug("Embedding generation skipped: %s", exc)
+
+            dup_id = _is_near_duplicate(art, recent, ai, new_embedding)
             score = _keyword_relevance(art, keywords)
 
             db_article = Article(
@@ -288,6 +332,7 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
                 image_url=art.image_url,
                 relevance_score=score,
                 duplicate_of_id=dup_id,
+                title_embedding=json.dumps(new_embedding) if new_embedding else None,
             )
             try:
                 with db.begin_nested():

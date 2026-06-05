@@ -47,11 +47,12 @@ _CATEGORIES = [
 
 class OpenAIProvider(AIProvider):
     def __init__(self, api_key: str, model: str, base_url: str | None = None,
-                 extra_body: dict | None = None):
+                 extra_body: dict | None = None, embedding_model: str | None = None):
         from openai import OpenAI
         self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model
         self._extra_body = extra_body or {}
+        self._embedding_model = embedding_model or "text-embedding-3-small"
 
     def _ask(self, prompt: str, max_tokens: int = 512,
              system: str | None = None) -> str:
@@ -190,6 +191,18 @@ class OpenAIProvider(AIProvider):
             f'Return JSON: {{"duplicate": true}}'
         )
         return bool(data.get("duplicate", False))
+
+    def embed(self, text: str) -> list[float]:
+        try:
+            resp = self._client.embeddings.create(
+                model=self._embedding_model,
+                input=text[:8191],  # OpenAI token limit
+            )
+            return resp.data[0].embedding
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).debug("OpenAI embed failed: %s", exc)
+            return []
 
     def suggest_keywords(self, topic_profile) -> list[str]:
         data = self._ask_json(

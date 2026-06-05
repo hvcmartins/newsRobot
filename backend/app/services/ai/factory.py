@@ -85,8 +85,10 @@ def _build_provider(db=None) -> AIProvider:
             return NullProvider()
         from .openai_provider import OpenAIProvider
         base_url = config.base_url or _OPENAI_COMPATIBLE_BASE_URLS.get(name)
+        emb_model = getattr(config, "embedding_model", None) or None
         logger.info("AI: %s (model=%s, base_url=%s)", name, model, base_url)
-        return OpenAIProvider(api_key=key, model=model, base_url=base_url)
+        return OpenAIProvider(api_key=key, model=model, base_url=base_url,
+                              embedding_model=emb_model)
 
     if name == "llamaserver":
         base_url = config.base_url
@@ -99,8 +101,10 @@ def _build_provider(db=None) -> AIProvider:
         # Confirmed working: launch llama.cpp server with --reasoning off
         # The extra_body flags are a best-effort hint for servers that read them
         # from the request (behaviour varies by build).
+        emb_model = getattr(config, "embedding_model", None) or None
         return OpenAIProvider(api_key=key or "local", model=model, base_url=base_url,
-                              extra_body={"enable_thinking": False, "thinking": False})
+                              extra_body={"enable_thinking": False, "thinking": False},
+                              embedding_model=emb_model)
 
     if name == "llamacpp":
         try:
@@ -132,7 +136,8 @@ def _build_provider(db=None) -> AIProvider:
         from .ollama import OllamaProvider
         base_url = config.base_url or "http://localhost:11434"
         logger.info("AI: Ollama (url=%s, model=%s)", base_url, model)
-        return OllamaProvider(base_url=base_url, model=model)
+        emb_model = getattr(config, "embedding_model", None) or None
+        return OllamaProvider(base_url=base_url, model=model, embedding_model=emb_model)
 
     logger.warning("Unknown AI provider '%s' — NullProvider", name)
     return NullProvider()

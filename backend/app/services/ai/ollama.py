@@ -19,9 +19,10 @@ _CATEGORIES = [
 
 
 class OllamaProvider(AIProvider):
-    def __init__(self, base_url: str, model: str):
+    def __init__(self, base_url: str, model: str, embedding_model: str | None = None):
         self._base_url = base_url.rstrip("/")
         self._model = model
+        self._embedding_model = embedding_model or "nomic-embed-text"
         from .stats import record_tokens as _rt
         self._record_tokens = _rt
 
@@ -150,6 +151,29 @@ class OllamaProvider(AIProvider):
             'Return JSON only: {"duplicate": true}'
         )
         return bool(data.get("duplicate", False))
+
+    def embed(self, text: str) -> list[float]:
+        try:
+            with httpx.Client(timeout=30) as client:
+                # Try newer /api/embed endpoint first (Ollama 0.3+), fall back to /api/embeddings
+                for path, key in [("/api/embed", "embeddings"), ("/api/embeddings", "embedding")]:
+                    try:
+                        resp = client.post(
+                            f"{self._base_url}{path}",
+                            json={"model": self._embedding_model, "input": text},
+                        )
+                        resp.raise_for_status()
+                        data = resp.json()
+                        emb = data.get(key)
+                        if emb:
+                            # /api/embed returns list[list[float]], /api/embeddings returns list[float]
+                            return emb[0] if isinstance(emb[0], list) else emb
+                    except Exception:
+                        continue
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).debug("Ollama embed failed: %s", exc)
+        return []
 
     def suggest_keywords(self, topic_profile) -> list[str]:
         data = self._ask_json(

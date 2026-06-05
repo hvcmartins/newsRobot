@@ -4,6 +4,18 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Return cosine similarity in [0, 1] between two embedding vectors."""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    mag_a = sum(x * x for x in a) ** 0.5
+    mag_b = sum(x * x for x in b) ** 0.5
+    if mag_a == 0.0 or mag_b == 0.0:
+        return 0.0
+    return dot / (mag_a * mag_b)
+
+
 def strip_thinking(text: str) -> str:
     """Remove <think>…</think> reasoning blocks emitted by models like Qwen3 / DeepSeek-R1.
 
@@ -417,6 +429,14 @@ class AIProvider(ABC):
         These replace the generic fixed list (Technology, Finance…) so articles
         are classified into categories that are meaningful for this tenant."""
         ...
+
+    def embed(self, text: str) -> list[float]:
+        """Return a dense embedding vector for the given text.
+
+        Providers that don't support embeddings return an empty list, which
+        causes the caller to fall back to string-similarity deduplication.
+        """
+        return []
 
     def enrich_article(self, title: str, excerpt: str,
                        topic_profile: str | None,
