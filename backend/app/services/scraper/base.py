@@ -9,8 +9,25 @@ import re
 
 import httpx
 from bs4 import BeautifulSoup
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+# Hosts that Google redirects to when it can't resolve the real URL
+# (cookie consent pages, login walls, etc.). Never save these as article URLs.
+_BAD_REDIRECT_HOSTS = frozenset({
+    'consent.google.com',
+    'accounts.google.com',
+})
+
+
+def _is_bad_redirect(url: str) -> bool:
+    try:
+        host = urlparse(url).netloc.lower()
+        return any(host == h or host.endswith('.' + h) for h in _BAD_REDIRECT_HOSTS)
+    except Exception:
+        return False
+
 
 _BROWSER_HEADERS = {
     "User-Agent": (
@@ -117,7 +134,7 @@ def resolve_article_url(url: str, timeout: int = 10) -> str:
             resp = client.get(url, headers=_BROWSER_HEADERS)
             resp.raise_for_status()
         final_url = str(resp.url)
-        if not _GOOGLE_NEWS_RE.search(final_url):
+        if not _GOOGLE_NEWS_RE.search(final_url) and not _is_bad_redirect(final_url):
             return final_url
         soup = BeautifulSoup(resp.text, "html.parser")
         for prop, attr in [("og:url", "property"), ("og:url", "name")]:

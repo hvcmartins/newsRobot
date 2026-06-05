@@ -113,9 +113,20 @@ class OpenAIProvider(AIProvider):
             start = cleaned.index("{")
             end = cleaned.rindex("}") + 1
             return json.loads(cleaned[start:end])
-        except (ValueError, json.JSONDecodeError) as exc:
-            logger.warning("Failed to parse JSON from AI response: %r", raw[:600])
-            raise ValueError(f"Invalid JSON from AI: {cleaned[:300]}") from exc
+        except (ValueError, json.JSONDecodeError):
+            pass
+        # Model returned a bare JSON primitive (e.g. false/true) — return {} so
+        # callers fall back to their safe defaults instead of propagating an error.
+        try:
+            parsed = json.loads(cleaned)
+            if not isinstance(parsed, dict):
+                logger.debug("OpenAI _ask_json: non-dict JSON (%s) — returning {}",
+                             type(parsed).__name__)
+                return {}
+        except (ValueError, json.JSONDecodeError):
+            pass
+        logger.warning("Failed to parse JSON from AI response: %r", raw[:600])
+        raise ValueError(f"Invalid JSON from AI: {cleaned[:300]}")
 
     def enrich_article(self, title, excerpt, topic_profile, categories,
                        accepted_languages=None, translation_language=None) -> EnrichmentResult:

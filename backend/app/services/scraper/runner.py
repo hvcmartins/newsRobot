@@ -204,10 +204,10 @@ def _enrich_article(article_id: int, topic_profile: str | None,
         ai_log.info("Enriched '%s' → %s", title_short, result.category or "—")
 
         # Resolve Google News redirect URLs to the real article URL
-        from app.services.scraper.base import fetch_og_image, resolve_article_url
+        from app.services.scraper.base import fetch_og_image, resolve_article_url, _is_bad_redirect
         if article.url and "news.google.com" in article.url:
             real_url = resolve_article_url(article.url)
-            if real_url != article.url:
+            if real_url != article.url and not _is_bad_redirect(real_url):
                 ai_log.debug("Resolved Google News URL for '%s': %s", title_short, real_url)
                 article.url = real_url
 

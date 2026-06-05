@@ -57,9 +57,20 @@ class ClaudeProvider(AIProvider):
             start = raw.index("{")
             end = raw.rindex("}") + 1
             return json.loads(raw[start:end])
-        except (ValueError, json.JSONDecodeError) as exc:
-            logger.warning("Failed to parse JSON from AI response: %s", raw)
-            raise ValueError(f"Invalid JSON from AI: {raw}") from exc
+        except (ValueError, json.JSONDecodeError):
+            pass
+        # Model returned a bare JSON primitive (e.g. false/true) — return {} so
+        # callers fall back to their safe defaults instead of propagating an error.
+        try:
+            parsed = json.loads(raw.strip())
+            if not isinstance(parsed, dict):
+                logger.debug("Claude _ask_json: non-dict JSON (%s) — returning {}",
+                             type(parsed).__name__)
+                return {}
+        except (ValueError, json.JSONDecodeError):
+            pass
+        logger.warning("Failed to parse JSON from AI response: %s", raw)
+        raise ValueError(f"Invalid JSON from AI: {raw}")
 
     def enrich_article(self, title, excerpt, topic_profile, categories,
                        accepted_languages=None, translation_language=None) -> EnrichmentResult:

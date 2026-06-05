@@ -74,9 +74,20 @@ class LlamaCppProvider(AIProvider):
             start = raw.index("{")
             end = raw.rindex("}") + 1
             return json.loads(raw[start:end])
-        except (ValueError, json.JSONDecodeError) as exc:
-            logger.warning("llama.cpp JSON parse failed: %s", raw)
-            raise ValueError(f"Invalid JSON from local model: {raw}") from exc
+        except (ValueError, json.JSONDecodeError):
+            pass
+        # Model returned a bare JSON primitive (e.g. false/true) — return {} so
+        # callers fall back to their safe defaults instead of propagating an error.
+        try:
+            parsed = json.loads(raw.strip())
+            if not isinstance(parsed, dict):
+                logger.debug("llama.cpp _ask_json: non-dict JSON (%s) — returning {}",
+                             type(parsed).__name__)
+                return {}
+        except (ValueError, json.JSONDecodeError):
+            pass
+        logger.warning("llama.cpp JSON parse failed: %s", raw)
+        raise ValueError(f"Invalid JSON from local model: {raw}")
 
     # Multiple-choice labels → (score, reason) — small models pick letters
     # far more reliably than generating arbitrary floating-point numbers.

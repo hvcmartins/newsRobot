@@ -325,8 +325,10 @@ def fetch_missing_images(tenant_id: int, db: Session = Depends(get_db)):
         return {"queued": 0}
 
     def _fetch_one(article_id: int, url: str) -> None:
-        from app.services.scraper.base import resolve_article_url
+        from app.services.scraper.base import resolve_article_url, _is_bad_redirect
         real_url = resolve_article_url(url)
+        if _is_bad_redirect(real_url):
+            real_url = url  # don't save consent/login pages
         img = fetch_og_image(real_url)
         if not img and real_url == url:
             return
@@ -360,10 +362,12 @@ def fetch_article_image(article_id: int, db: Session = Depends(get_db)):
     article = db.get(Article, article_id)
     if not article:
         raise HTTPException(404, "Article not found")
-    from app.services.scraper.base import fetch_og_image, resolve_article_url
+    from app.services.scraper.base import fetch_og_image, resolve_article_url, _is_bad_redirect
     real_url = resolve_article_url(article.url)
-    if real_url != article.url:
+    if real_url != article.url and not _is_bad_redirect(real_url):
         article.url = real_url
+    else:
+        real_url = article.url
     img = fetch_og_image(real_url)
     if img:
         article.image_url = img

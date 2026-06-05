@@ -74,9 +74,20 @@ class OllamaProvider(AIProvider):
             start = raw.index("{")
             end = raw.rindex("}") + 1
             return json.loads(raw[start:end])
-        except (ValueError, json.JSONDecodeError) as exc:
-            logger.warning("Ollama JSON parse failed: %s", raw)
-            raise ValueError(f"Invalid JSON from Ollama: {raw}") from exc
+        except (ValueError, json.JSONDecodeError):
+            pass
+        # Model returned a bare JSON primitive (e.g. false/true) — return {} so
+        # callers fall back to their safe defaults instead of propagating an error.
+        try:
+            parsed = json.loads(raw.strip())
+            if not isinstance(parsed, dict):
+                logger.debug("Ollama _ask_json: non-dict JSON (%s) — returning {}",
+                             type(parsed).__name__)
+                return {}
+        except (ValueError, json.JSONDecodeError):
+            pass
+        logger.warning("Ollama JSON parse failed: %s", raw)
+        raise ValueError(f"Invalid JSON from Ollama: {raw}")
 
     def enrich_article(self, title, excerpt, topic_profile, categories,
                        accepted_languages=None, translation_language=None) -> EnrichmentResult:
