@@ -144,8 +144,10 @@ class OllamaProvider(AIProvider):
 
     def are_duplicates(self, title1, excerpt1, title2, excerpt2) -> bool:
         data = self._ask_json(
-            f"Same story?\nA: {title1}\nB: {title2}\n"
-            f'Return JSON: {{"duplicate": false}}'
+            "Do these two news articles cover the same story?\n\n"
+            f"Article 1: {title1}\n{(excerpt1 or '')[:300]}\n\n"
+            f"Article 2: {title2}\n{(excerpt2 or '')[:300]}\n\n"
+            'Return JSON only: {"duplicate": true}'
         )
         return bool(data.get("duplicate", False))
 
