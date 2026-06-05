@@ -48,9 +48,10 @@ def _decode_google_news_url(google_url: str) -> str | None:
     """Extract the real article URL from a Google News URL by decoding its base64 payload.
 
     Google News encodes the target URL as a protobuf message in the URL path.
-    This decodes it without any HTTP request.
+    Handles both /articles/ and /read/ path formats. No HTTP request needed.
     """
-    match = re.search(r'/articles/([A-Za-z0-9_-]+)', google_url)
+    # Match either /articles/<token> or /read/<token>
+    match = re.search(r'/(?:articles|read)/([A-Za-z0-9_-]+)', google_url)
     if not match:
         return None
     encoded = match.group(1)
@@ -64,9 +65,11 @@ def _decode_google_news_url(google_url: str) -> str | None:
             idx = text.find(prefix)
             if idx >= 0:
                 url = text[idx:]
-                # Strip binary garbage that follows the URL in the protobuf
+                # Strip binary garbage after the URL: non-ASCII or control chars
                 url = re.sub(r'[\x00-\x1f\x7f-\xff].*', '', url)
-                if url.startswith('http'):
+                # Also strip anything after a space (protobuf field separators)
+                url = url.split()[0] if url else url
+                if url.startswith('http') and '.' in url:
                     return url
     except Exception as exc:
         logger.debug("_decode_google_news_url failed for %s: %s", google_url, exc)
@@ -158,13 +161,36 @@ def fetch_og_image(url: str, timeout: int = 10) -> str | None:
     """Fetch an article URL and extract the best available image.
 
     Handles Google News redirect URLs by decoding the real URL first.
+    Falls back to fetching the Google News page itself if URL resolution
+    fails, since Google sometimes embeds og:image in the news card HTML.
     """
     if _GOOGLE_NEWS_RE.search(url):
         real = resolve_article_url(url, timeout)
         if real == url:
-            logger.debug("Could not resolve Google News URL for og:image: %s", url)
-            return None
-        url = real
+            # Decode failed — try fetching the Google News page itself and
+            # extracting og:image from the HTML (works for some article formats)
+            try:
+                with httpx.Client(timeout=timeout, follow_redirects=False) as client:
+                    resp = client.get(url, headers=_BROWSER_HEADERS)
+                soup = BeautifulSoup(resp.text, "html.parser")
+                img = _extract_og_image_from_soup(soup)
+                if img:
+                    return img
+                # Also check if the page redirected us to the real article
+                og_url_tag = soup.find("meta", attrs={"property": "og:url"})
+                if og_url_tag:
+                    target = og_url_tag.get("content", "").strip()
+                    if target.startswith("http") and not _GOOGLE_NEWS_RE.search(target):
+                        url = target  # fall through to normal fetch below
+                    else:
+                        return None
+                else:
+                    return None
+            except Exception as exc:
+                logger.debug("fetch_og_image Google News page fetch failed for %s: %s", url, exc)
+                return None
+        else:
+            url = real
 
     try:
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
