@@ -225,6 +225,14 @@ class RssScraper(AbstractScraper):
             if not url:
                 continue
 
+            # Decode Google News redirect URLs immediately so the real article
+            # URL is stored in the DB from the start
+            if "news.google.com" in url:
+                from .base import _decode_google_news_url
+                decoded = _decode_google_news_url(url)
+                if decoded:
+                    url = decoded
+
             raw_excerpt = entry.get("summary", "")
             if entry.get("content"):
                 raw_excerpt = entry.content[0].value
