@@ -22,6 +22,22 @@ const LANGUAGES = [
   { code: 'ru', label: 'Russian' },
 ]
 
+const SCRAPE_PRESETS = [
+  { label: 'Every 30 minutes', cron: '*/30 * * * *' },
+  { label: 'Every 1 hour',     cron: '0 * * * *' },
+  { label: 'Every 2 hours',    cron: '0 */2 * * *' },
+  { label: 'Every 4 hours',    cron: '0 */4 * * *' },
+  { label: 'Every 6 hours',    cron: '0 */6 * * *' },
+  { label: 'Every 12 hours',   cron: '0 */12 * * *' },
+  { label: 'Every 24 hours',   cron: '0 0 * * *' },
+  { label: 'Custom…',          cron: '' },
+]
+
+function cronToPreset(cron: string): string {
+  const hit = SCRAPE_PRESETS.find((p) => p.cron && p.cron === cron)
+  return hit ? hit.cron : ''  // '' means Custom
+}
+
 export default function TenantSettingsPage() {
   const { activeTenant, refreshTenants } = useTenant()
   const qc = useQueryClient()
@@ -234,9 +250,46 @@ export default function TenantSettingsPage() {
           </div>
         </div>
 
-        <Input label="Scrape Schedule (cron)" value={form.schedule_cron ?? ''} onChange={(e) => set({ schedule_cron: e.target.value })}
-          placeholder="0 * * * *  (hourly)" />
-        <p style={{ fontSize: 11, color: '#999', marginTop: -8 }}>Cron format: minute hour day month weekday. E.g. "0 */2 * * *" = every 2 hours</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Scrape Frequency</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {SCRAPE_PRESETS.map((p) => {
+              const isCustom = p.cron === ''
+              const active = isCustom
+                ? cronToPreset(form.schedule_cron ?? '0 * * * *') === ''
+                : form.schedule_cron === p.cron
+              return (
+                <button
+                  key={p.label}
+                  onClick={() => { if (!isCustom) set({ schedule_cron: p.cron }) }}
+                  style={{
+                    padding: '6px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer',
+                    border: `1.5px solid ${active ? 'var(--brand-color, #0066cc)' : '#ddd'}`,
+                    background: active ? 'var(--brand-color, #0066cc)' : '#fff',
+                    color: active ? '#fff' : '#444',
+                    fontWeight: active ? 600 : 400,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {p.label}
+                </button>
+              )
+            })}
+          </div>
+          {cronToPreset(form.schedule_cron ?? '0 * * * *') === '' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+              <input
+                value={form.schedule_cron ?? ''}
+                onChange={(e) => set({ schedule_cron: e.target.value })}
+                placeholder="0 * * * *"
+                style={{ padding: '7px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13, width: 200 }}
+              />
+              <span style={{ fontSize: 11, color: '#999' }}>
+                Cron format: minute hour day month weekday — e.g. "0 */3 * * *" = every 3 h
+              </span>
+            </div>
+          )}
+        </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 12, fontWeight: 500, color: '#555' }}>Max article age (days)</label>
