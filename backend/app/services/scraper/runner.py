@@ -4,7 +4,7 @@ import logging
 import datetime
 import time
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, Future
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -22,6 +22,10 @@ _enrich_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="enrich"
 _paused_tenants: set[int] = set()
 _paused_lock = threading.Lock()
 
+# Track submitted (not-yet-started) futures per tenant so pause can cancel them
+_tenant_futures: dict[int, list[Future]] = {}
+_futures_lock = threading.Lock()
+
 # Per-tenant scrape progress — updated by run_all_sources
 _scrape_state: dict[int, dict] = {}
 _scrape_lock = threading.Lock()
@@ -34,15 +38,40 @@ def get_scrape_status(tenant_id: int) -> dict:
         }))
 
 
+def _submit_enrich(tenant_id: int, *args, **kwargs) -> None:
+    """Submit _enrich_article and track the future for cancellation on pause."""
+    future = _enrich_executor.submit(_enrich_article, *args, **kwargs)
+    with _futures_lock:
+        _tenant_futures.setdefault(tenant_id, []).append(future)
+    future.add_done_callback(lambda f: _remove_future(tenant_id, f))
+
+
+def _remove_future(tenant_id: int, future: Future) -> None:
+    with _futures_lock:
+        lst = _tenant_futures.get(tenant_id)
+        if lst:
+            try:
+                lst.remove(future)
+            except ValueError:
+                pass
+
+
 def pause_tenant_enrichment(tenant_id: int) -> None:
     with _paused_lock:
         _paused_tenants.add(tenant_id)
-    logger.info("Enrichment paused for tenant %d", tenant_id)
+    # Cancel every pending (not-yet-started) future for this tenant so the
+    # queue drains immediately instead of task-by-task through Phase 1.
+    with _futures_lock:
+        futures = list(_tenant_futures.get(tenant_id, []))
+    cancelled = sum(1 for f in futures if f.cancel())
+    logger.info("Enrichment paused for tenant %d (%d pending tasks cancelled)", tenant_id, cancelled)
 
 
 def resume_tenant_enrichment(tenant_id: int) -> None:
     with _paused_lock:
         _paused_tenants.discard(tenant_id)
+    with _futures_lock:
+        _tenant_futures.pop(tenant_id, None)
     logger.info("Enrichment resumed for tenant %d", tenant_id)
 
 
@@ -201,6 +230,13 @@ def _enrich_article(article_id: int, topic_profile: str | None,
         ai_log.info("Relevance %.2f — '%s'%s",
                     result.score, title_short,
                     f" ({result.reason})" if result.reason else "")
+
+    # Check pause after the AI call — the call itself can't be interrupted,
+    # but we bail before the HTTP fetches and embedding that follow.
+    if is_enrichment_paused(a_tenant_id):
+        ai_log.debug("Enrichment paused for tenant %d — aborting post-AI steps for article %d",
+                     a_tenant_id, article_id)
+        return
 
     # Resolve Google News redirect to the real URL (no DB access)
     real_url = a_url
@@ -407,8 +443,9 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         if new_article_ids:
             logger.info("Queuing AI enrichment for %d article(s)", len(new_article_ids))
         for article_id in new_article_ids:
-            _enrich_executor.submit(
-                _enrich_article, article_id,
+            _submit_enrich(
+                source.tenant_id,
+                article_id,
                 tenant.topic_profile, tenant_categories,
                 accepted_langs, tenant.translation_language,
             )
@@ -484,8 +521,9 @@ def enrich_pending(tenant_id: int, db: Session) -> int:
                .all())
     count = 0
     for a in pending:
-        _enrich_executor.submit(
-            _enrich_article, a.id, topic_profile, categories,
+        _submit_enrich(
+            tenant_id,
+            a.id, topic_profile, categories,
             accepted_langs, translation_lang,
         )
         count += 1
