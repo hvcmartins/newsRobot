@@ -167,11 +167,19 @@ def _enrich_article(article_id: int, topic_profile: str | None,
         a_url = article.url
         a_image_url = article.image_url
         a_embedding = article.title_embedding
+        a_tenant_id = article.tenant_id
     finally:
         db.close()
 
     ai = get_ai_provider()
     if isinstance(ai, NullProvider):
+        return
+
+    # Re-check pause here: the task may have been queued before pause was set
+    # and Phase 1 ran before it took effect.
+    if is_enrichment_paused(a_tenant_id):
+        ai_log.debug("Enrichment paused for tenant %d — skipping article %d (pre-AI check)",
+                     a_tenant_id, article_id)
         return
 
     title_short = a_title[:70]
@@ -313,17 +321,15 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
         from app.services.ai.factory import get_ai_provider
         ai = get_ai_provider()
 
-        new_count = 0
-        age_skipped = 0
-        url_skipped = 0
-        high_priority_new = []
-        new_article_ids = []
         age_days = tenant.max_article_age_days or settings.max_article_age_days
         max_age = datetime.timedelta(days=age_days)
         now = datetime.datetime.utcnow()
 
+        # ── Phase A: filter candidates (reads only, no write lock) ───────────
+        candidates: list = []
+        age_skipped = 0
+        url_skipped = 0
         for art in articles:
-            # Age filter
             if art.published_at:
                 pub = art.published_at.replace(tzinfo=None)
                 if (now - pub) > max_age:
@@ -335,19 +341,31 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
                 logger.debug("Skipping undated web article: '%s'", art.title[:70])
                 age_skipped += 1
                 continue
-
-            # Persistent deduplication via scraped_urls (survives archiving/deletion)
             if _is_url_seen(db, source.tenant_id, art.url):
                 url_skipped += 1
                 continue
+            candidates.append(art)
 
-            # Generate embedding for semantic dedup (falls back to [] on failure)
-            new_embedding: list[float] = []
-            try:
-                new_embedding = ai.embed(f"{art.title} {art.excerpt or ''}"[:500])
-            except Exception as exc:
-                logger.debug("Embedding generation skipped: %s", exc)
+        # ── Phase B: pre-compute embeddings outside the write transaction ─────
+        # ai.embed() inside the write loop holds the SQLite write lock for the
+        # entire duration of N API calls (easily 30-60 s for large batches),
+        # blocking every concurrent writer → "database is locked".
+        pre_embeddings: list[list[float]] = []
+        for art in candidates:
+            emb: list[float] = []
+            if not is_enrichment_paused(source.tenant_id):
+                try:
+                    emb = ai.embed(f"{art.title} {art.excerpt or ''}"[:500])
+                except Exception as exc:
+                    logger.debug("Embedding generation skipped: %s", exc)
+            pre_embeddings.append(emb)
 
+        # ── Phase C: dedup + write (fast; no embed calls inside write lock) ───
+        new_count = 0
+        high_priority_new = []
+        new_article_ids = []
+
+        for art, new_embedding in zip(candidates, pre_embeddings):
             dup_id = _is_near_duplicate(art, recent, ai, new_embedding)
             score = _keyword_relevance(art, keywords)
 

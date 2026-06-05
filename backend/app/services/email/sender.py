@@ -110,6 +110,26 @@ def send_digest_if_configured(tenant_id: int, articles,
     if config.frequency != frequency and frequency != "immediate":
         return False
 
+    # Enforce send_days at send time — guards against stale scheduler jobs
+    # (e.g. jobs created before send_days was set) and acts as a belt-and-
+    # suspenders check alongside the CronTrigger day-of-week restriction.
+    # Immediate sends (breaking news) always go through regardless of day.
+    if frequency != "immediate":
+        send_days_raw = getattr(config, "send_days", None)
+        if send_days_raw:
+            import json as _json
+            try:
+                days = _json.loads(send_days_raw)
+                today = datetime.datetime.utcnow().strftime("%a").lower()
+                if days and today not in days:
+                    logger.info(
+                        "Skipping digest for tenant %d: today=%s not in send_days=%s",
+                        tenant_id, today, days,
+                    )
+                    return False
+            except Exception:
+                pass
+
     html, text = render_email(context)
     try:
         send_email_raw(
