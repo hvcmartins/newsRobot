@@ -27,19 +27,27 @@ class OllamaProvider(AIProvider):
         self._record_tokens = _rt
 
     def _ask(self, prompt: str, max_tokens: int = 512,
-             system: str | None = None) -> str:
+             system: str | None = None, thinking: bool = False) -> str:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt})
+        # Qwen3 honours /no_think at message level to suppress the thinking block.
+        # We disable it for all structured (JSON) calls and enable it only for
+        # long-form narrative generation where reasoning improves quality.
+        user_content = prompt if thinking else f"/no_think\n\n{prompt}"
+        messages.append({"role": "user", "content": user_content})
         t0 = time.monotonic()
-        with httpx.Client(timeout=60) as client:
+        with httpx.Client(timeout=120) as client:
             resp = client.post(
                 f"{self._base_url}/v1/chat/completions",
                 json={
                     "model": self._model,
                     "messages": messages,
                     "max_tokens": max_tokens,
+                    # Qwen3 recommended sampling params for non-thinking mode.
+                    # Lower temperature for JSON tasks (deterministic), higher for prose.
+                    "temperature": 0.7 if thinking else 0.3,
+                    "top_p": 0.95 if thinking else 0.8,
                 },
             )
             resp.raise_for_status()
@@ -50,8 +58,9 @@ class OllamaProvider(AIProvider):
                                 usage.get("prompt_tokens", 0))
         return strip_thinking(data["choices"][0]["message"]["content"].strip())
 
-    def _ask_array(self, prompt: str, system: str | None = None) -> list:
-        raw = self._ask(prompt, max_tokens=2048, system=system)
+    def _ask_array(self, prompt: str, system: str | None = None,
+                   thinking: bool = False) -> list:
+        raw = self._ask(prompt, max_tokens=2048, system=system, thinking=thinking)
         try:
             start = raw.index("[")
             end = raw.rindex("]") + 1
@@ -69,7 +78,7 @@ class OllamaProvider(AIProvider):
         raise ValueError("Could not parse source list from Ollama response")
 
     def _ask_json(self, prompt: str, system: str | None = None) -> dict:
-        raw = self._ask(prompt, system=system)
+        raw = self._ask(prompt, system=system)  # thinking=False (default) for JSON tasks
         try:
             start = raw.index("{")
             end = raw.rindex("}") + 1
@@ -141,8 +150,29 @@ class OllamaProvider(AIProvider):
 
     def summarize(self, title, excerpt) -> str:
         return self._ask(
-            f"Summarize in 2-3 concise, factual sentences.\nTitle: {title}\nExcerpt: {excerpt or ''}"
+            f"Summarize in 2-3 concise, factual sentences.\nTitle: {title}\nExcerpt: {excerpt or ''}",
+            max_tokens=256,
         )
+
+    def summarize_monthly(self, tenant_name, month_label, articles_text,
+                          language="English") -> str:
+        from app.services.ai.base import MONTHLY_NARRATIVE_TPL
+        prompt = MONTHLY_NARRATIVE_TPL.format(
+            tenant_name=tenant_name, month_label=month_label,
+            articles_text=articles_text, language=language,
+        )
+        # Use thinking=True for long-form narrative — reasoning improves coherence.
+        # max_tokens=2048 accommodates 4-6 paragraphs without truncation.
+        return self._ask(prompt, max_tokens=2048, thinking=True)
+
+    def summarize_yearly(self, tenant_name, year, months_text,
+                         language="English") -> str:
+        from app.services.ai.base import YEARLY_NARRATIVE_TPL
+        prompt = YEARLY_NARRATIVE_TPL.format(
+            tenant_name=tenant_name, year=year,
+            months_text=months_text, language=language,
+        )
+        return self._ask(prompt, max_tokens=3000, thinking=True)
 
     def categorize(self, title, excerpt, categories) -> str:
         cats = categories or _CATEGORIES
@@ -202,7 +232,9 @@ class OllamaProvider(AIProvider):
         lang = build_language_constraint(accepted_languages)
         system = DISCOVER_SYSTEM.format(language_constraint=lang)
         user = DISCOVER_USER_TPL.format(topic_profile=topic_profile)
-        return normalise_discovered(self._ask_array(user, system=system))
+        # thinking=True: source discovery benefits from reasoning to cover all
+        # topic areas; the output is still JSON so strip_thinking handles cleanup.
+        return normalise_discovered(self._ask_array(user, system=system, thinking=True))
 
     def recommend_sources(self, topic_profile, catalog) -> list[int]:
         if not catalog:
