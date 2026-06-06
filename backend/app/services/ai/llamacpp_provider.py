@@ -48,24 +48,31 @@ class LlamaCppProvider(AIProvider):
                     )
         return self._llm
 
-    def _ask(self, prompt: str, max_tokens: int = 512) -> str:
+    def _ask(self, prompt: str, max_tokens: int = 512,
+             thinking: bool = False, temperature: float | None = None) -> str:
         from .stats import record_tokens
         llm = self._get_llm()
+        # Qwen3: /no_think at the START of the user turn suppresses the
+        # <think> block entirely. Default off for structured tasks; callers
+        # pass thinking=True for long-form generation (narratives, discovery).
+        user_content = prompt if thinking else f"/no_think\n\n{prompt}"
+        # JSON tasks: low temperature for determinism.
+        # Narrative/reasoning tasks: higher temperature per Qwen3 docs.
+        temp = temperature if temperature is not None else (0.6 if thinking else 0.1)
         # Serialize all inference calls — llama_cpp's Llama object is not
         # thread-safe; concurrent calls from the enrichment thread pool
         # cause segfaults that crash the entire container.
         t0 = time.monotonic()
         with self._infer_lock:
             resp = llm.create_chat_completion(
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": user_content}],
                 max_tokens=max_tokens,
-                temperature=0.1,
+                temperature=temp,
             )
         usage = resp.get("usage", {})
         if usage.get("completion_tokens"):
             record_tokens(usage["completion_tokens"], time.monotonic() - t0,
                           input_tokens=usage.get("prompt_tokens", 0))
-        # Strip <think>…</think> blocks (Qwen3, DeepSeek-R1, etc.)
         return strip_thinking(resp["choices"][0]["message"]["content"].strip())
 
     def _ask_json(self, prompt: str) -> dict:
@@ -101,8 +108,6 @@ class LlamaCppProvider(AIProvider):
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
         profile_short = (topic_profile or "")[:250]
         excerpt_short = (excerpt or "")[:150]
-        # /no_think suppresses Qwen3 reasoning mode — without it the thinking
-        # block consumes all of max_tokens=8 before the answer letter is generated.
         prompt = (
             f"Company profile: {profile_short}\n\n"
             f"News article:\nTitle: {title[:150]}\n{excerpt_short}\n\n"
@@ -111,8 +116,10 @@ class LlamaCppProvider(AIProvider):
             "B - Useful: relevant market, regulatory, or technology news\n"
             "C - Marginal: only loosely related\n"
             "D - Irrelevant: unrelated topic\n\n"
-            "Reply with exactly one letter (A, B, C, or D): /no_think"
+            "Reply with exactly one letter (A, B, C, or D):"
         )
+        # thinking=False: _ask() prepends /no_think so the model skips the
+        # thinking block and goes straight to the single-letter answer.
         raw = self._ask(prompt, max_tokens=16).strip()
         logger.debug("llama.cpp relevance raw: %r", raw[:30])
 
@@ -169,8 +176,27 @@ class LlamaCppProvider(AIProvider):
     def summarize(self, title, excerpt) -> str:
         return self._ask(
             f"Summarize in 2-3 sentences. Be factual.\n"
-            f"Title: {title}\nExcerpt: {excerpt or ''}"
+            f"Title: {title}\nExcerpt: {excerpt or ''}",
+            max_tokens=256,
         )
+
+    def summarize_monthly(self, tenant_name, month_label, articles_text,
+                          language="English") -> str:
+        from app.services.ai.base import MONTHLY_NARRATIVE_TPL
+        prompt = MONTHLY_NARRATIVE_TPL.format(
+            tenant_name=tenant_name, month_label=month_label,
+            articles_text=articles_text, language=language,
+        )
+        return self._ask(prompt, max_tokens=2048, thinking=True, temperature=0.6)
+
+    def summarize_yearly(self, tenant_name, year, months_text,
+                         language="English") -> str:
+        from app.services.ai.base import YEARLY_NARRATIVE_TPL
+        prompt = YEARLY_NARRATIVE_TPL.format(
+            tenant_name=tenant_name, year=year,
+            months_text=months_text, language=language,
+        )
+        return self._ask(prompt, max_tokens=3000, thinking=True, temperature=0.6)
 
     def categorize(self, title, excerpt, categories) -> str:
         cats = categories or _CATEGORIES
@@ -200,10 +226,10 @@ class LlamaCppProvider(AIProvider):
     def discover_sources(self, topic_profile, accepted_languages=None) -> list[dict]:
         from app.services.ai.base import build_language_constraint
         lang = build_language_constraint(accepted_languages)
-        # Use a shorter prompt and more tokens so the response isn't truncated
         prompt = DISCOVER_PROMPT_SHORT.format(topic_profile=topic_profile,
                                               language_constraint=lang)
-        raw = self._ask(prompt, max_tokens=2048)
+        # thinking=True: discovery benefits from reasoning to cover all topic areas
+        raw = self._ask(prompt, max_tokens=2048, thinking=True)
         logger.debug("llama.cpp discover raw output: %s", raw[:500])
 
         # Attempt 1: standard JSON parse
