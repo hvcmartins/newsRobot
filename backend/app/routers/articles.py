@@ -76,6 +76,20 @@ def list_articles(
 
 # ── Static-path routes (must come before /{article_id}) ──────────────────────
 
+@router.get("/categories")
+def list_categories(tenant_id: int, db: Session = Depends(get_db)):
+    """Return all distinct non-null categories present in the pending queue."""
+    from sqlalchemy import distinct
+    rows = (db.query(distinct(Article.category))
+            .filter(Article.tenant_id == tenant_id,
+                    Article.archived_at.is_(None),
+                    Article.duplicate_of_id.is_(None),
+                    Article.ai_enriched == True,  # noqa: E712
+                    Article.category.isnot(None))
+            .all())
+    return {"categories": sorted(r[0] for r in rows)}
+
+
 @router.get("/enrichment-status")
 def enrichment_status(tenant_id: int, db: Session = Depends(get_db)):
     from app.services.ai.stats import get_stats

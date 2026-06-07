@@ -38,16 +38,20 @@ export default function ArticlesPage() {
     try { return JSON.parse(activeTenant?.ai_categories ?? '[]') } catch { return [] }
   }, [activeTenant?.ai_categories])
 
+  const { data: rawCategories = [] } = useQuery({
+    queryKey: ['article-categories', tenantId],
+    queryFn: () => articleApi.categories(tenantId),
+    enabled: !!tenantId,
+  })
+
   const categories = React.useMemo(() => {
-    const cats = new Set((data?.items ?? []).map((a) => a.category).filter(Boolean) as string[])
-    // Sort filter dropdown by the same defined order, then alpha for unrecognised ones
     const orderIdx = new Map(categoryOrder.map((c, i) => [c, i]))
-    return [...cats].sort((a, b) => {
+    return [...rawCategories].sort((a, b) => {
       const ia = orderIdx.has(a) ? orderIdx.get(a)! : categoryOrder.length
       const ib = orderIdx.has(b) ? orderIdx.get(b)! : categoryOrder.length
       return ia !== ib ? ia - ib : a.localeCompare(b)
     })
-  }, [data?.items, categoryOrder])
+  }, [rawCategories, categoryOrder])
 
   const markReadMut = useMutation({
     mutationFn: articleApi.markRead,
@@ -58,6 +62,7 @@ export default function ArticlesPage() {
     mutationFn: (id: number) => articleApi.reEnrich(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['articles', tenantId] })
+      qc.invalidateQueries({ queryKey: ['article-categories', tenantId] })
       qc.invalidateQueries({ queryKey: ['enrichment-status', tenantId] })
     },
   })
