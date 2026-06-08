@@ -106,7 +106,9 @@ class LlamaCppProvider(AIProvider):
     }
 
     def score_relevance(self, title, excerpt, topic_profile) -> RelevanceResult:
-        profile_short = (topic_profile or "")[:250]
+        # Use up to 2000 chars — fits comfortably in the 8K context window and
+        # is enough to include all priority tiers from a detailed profile.
+        profile_short = (topic_profile or "")[:2000]
         excerpt_short = (excerpt or "")[:150]
         prompt = (
             f"Company profile: {profile_short}\n\n"
