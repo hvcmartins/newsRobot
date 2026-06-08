@@ -8,6 +8,7 @@ export interface ScrapedUrlItem {
   scraped_at: string | null
   article_id: number | null
   article_archived: boolean | null
+  article_enriched: boolean | null
 }
 
 export interface ScrapedUrlPage {

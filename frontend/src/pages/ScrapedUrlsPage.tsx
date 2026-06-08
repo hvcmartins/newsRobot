@@ -11,7 +11,7 @@ const PAGE_SIZE = 50
 
 type SortBy = 'scraped_at' | 'source' | 'status'
 type SortDir = 'asc' | 'desc'
-type StatusFilter = '' | 'none' | 'queue' | 'archived'
+type StatusFilter = '' | 'none' | 'pending' | 'queue' | 'archived'
 
 // ── Add URL modal ─────────────────────────────────────────────────────────────
 function AddUrlModal({
@@ -178,9 +178,9 @@ export default function ScrapedUrlsPage() {
     onSuccess: () => { invalidate(); setSelected((s) => { s.delete(deleteMut.variables!.id); return new Set(s) }) },
   })
 
-  const handleRemove = useCallback((row: { id: number; article_id: number | null; article_archived: boolean | null }) => {
+  const handleRemove = useCallback((row: { id: number; article_id: number | null; article_archived: boolean | null; article_enriched: boolean | null }) => {
     if (row.article_id) {
-      const where = row.article_archived ? 'archive' : 'news queue'
+      const where = row.article_archived ? 'archive' : row.article_enriched ? 'news queue' : 'pending enrichment'
       const choice = window.confirm(
         `This article is still in your ${where}.\n\n` +
         `• OK  → Remove URL entry AND delete the article (allows fresh re-scrape)\n` +
@@ -329,6 +329,7 @@ export default function ScrapedUrlsPage() {
         >
           <option value="">All Statuses</option>
           <option value="none">— No article</option>
+          <option value="pending">Pending enrichment</option>
           <option value="queue">In queue</option>
           <option value="archived">Archived</option>
         </select>
@@ -441,7 +442,7 @@ export default function ScrapedUrlsPage() {
                       >
                         Archived
                       </Link>
-                    ) : (
+                    ) : row.article_enriched ? (
                       <button
                         onClick={() => navigate(`/articles?highlight=${row.article_id}`)}
                         style={{
@@ -453,6 +454,17 @@ export default function ScrapedUrlsPage() {
                       >
                         In queue
                       </button>
+                    ) : (
+                      <span
+                        style={{
+                          display: 'inline-block', fontSize: 10, fontWeight: 600,
+                          padding: '2px 7px', borderRadius: 10,
+                          background: '#eff6ff', color: '#3b82f6',
+                        }}
+                        title="Scraped but awaiting AI enrichment"
+                      >
+                        Pending
+                      </span>
                     )
                   ) : (
                     <span style={{ fontSize: 10, color: '#d1d5db' }}>—</span>

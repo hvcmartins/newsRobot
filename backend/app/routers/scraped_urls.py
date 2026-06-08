@@ -23,6 +23,7 @@ def _row_to_dict(row: ScrapedUrl, source_map: dict, article_map: dict) -> dict:
         "scraped_at": row.scraped_at.isoformat() if row.scraped_at else None,
         "article_id": art["id"] if art else None,
         "article_archived": art["archived"] if art else None,
+        "article_enriched": art["enriched"] if art else None,
     }
 
 
@@ -42,7 +43,7 @@ def list_scraped_urls(
         sort_by = "scraped_at"
     if sort_dir not in ("asc", "desc"):
         sort_dir = "desc"
-    if status_filter not in (None, "none", "queue", "archived"):
+    if status_filter not in (None, "none", "pending", "queue", "archived"):
         status_filter = None
 
     base = db.query(ScrapedUrl).filter(ScrapedUrl.tenant_id == tenant_id)
@@ -64,8 +65,10 @@ def list_scraped_urls(
     # Apply status filter before counting
     if status_filter == "none":
         base = base.filter(art_alias.id.is_(None))
+    elif status_filter == "pending":
+        base = base.filter(art_alias.id.isnot(None), art_alias.archived_at.is_(None), art_alias.ai_enriched == False)  # noqa: E712
     elif status_filter == "queue":
-        base = base.filter(art_alias.id.isnot(None), art_alias.archived_at.is_(None))
+        base = base.filter(art_alias.id.isnot(None), art_alias.archived_at.is_(None), art_alias.ai_enriched == True)  # noqa: E712
     elif status_filter == "archived":
         base = base.filter(art_alias.id.isnot(None), art_alias.archived_at.isnot(None))
 
@@ -81,8 +84,9 @@ def list_scraped_urls(
     elif sort_by == "status":
         status_expr = case(
             (art_alias.id.is_(None), 0),
-            (art_alias.archived_at.is_(None), 1),
-            else_=2,
+            (art_alias.archived_at.isnot(None), 3),
+            (art_alias.ai_enriched == True, 2),  # noqa: E712
+            else_=1,  # pending (not enriched)
         )
         order_col = status_expr.asc() if sort_dir == "asc" else status_expr.desc()
     else:
@@ -108,12 +112,12 @@ def list_scraped_urls(
     article_map: dict = {}
     if page_urls:
         arts = (
-            db.query(Article.id, Article.url, Article.archived_at)
+            db.query(Article.id, Article.url, Article.archived_at, Article.ai_enriched)
             .filter(Article.tenant_id == tenant_id, Article.url.in_(page_urls))
             .all()
         )
         for a in arts:
-            article_map[a.url] = {"id": a.id, "archived": a.archived_at is not None}
+            article_map[a.url] = {"id": a.id, "archived": a.archived_at is not None, "enriched": bool(a.ai_enriched)}
 
     return {
         "total": total,
