@@ -185,84 +185,6 @@ function DigestGroup({ digest, tenantId, isExpanded, onToggle }: DigestGroupProp
   )
 }
 
-// ── Filtered (low-relevance) accordion ───────────────────────────────────────
-
-function FilteredGroup({ tenantId }: { tenantId: number }) {
-  const [expanded, setExpanded] = useState(false)
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['archive-filtered', tenantId],
-    queryFn: () => articleApi.list({ tenant_id: tenantId, undigested: true, size: 500 }),
-    enabled: expanded,
-  })
-
-  const total = data?.total ?? 0
-
-  // Don't render at all if nothing is filtered yet (query not run)
-  if (!expanded && data === undefined) {
-    // Prefetch count with a lightweight query
-  }
-
-  return (
-    <div style={{
-      background: '#fff', borderRadius: 10,
-      border: '1px solid #eee',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-      overflow: 'hidden',
-      opacity: 0.8,
-    }}>
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-          padding: '14px 18px', background: 'none', border: 'none',
-          cursor: 'pointer', textAlign: 'left',
-        }}
-      >
-        <span style={{
-          fontSize: 12, color: '#bbb', flexShrink: 0, width: 16,
-          transform: expanded ? 'rotate(90deg)' : 'none',
-          transition: 'transform 0.15s ease', display: 'inline-block',
-        }}>▶</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#888' }}>
-            Auto-filtered articles
-          </div>
-          <div style={{ fontSize: 12, color: '#bbb', marginTop: 2 }}>
-            Enriched but below relevance threshold — never included in any digest
-          </div>
-        </div>
-        <span style={{
-          fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 12,
-          background: '#f5f5f5', color: '#aaa',
-        }}>
-          {expanded && total > 0 ? `${total} article${total !== 1 ? 's' : ''}` : '…'}
-        </span>
-      </button>
-
-      {expanded && (
-        <div style={{ borderTop: '1px solid #f4f4f4', padding: '0 18px' }}>
-          {isLoading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
-              <Spinner size={28} />
-            </div>
-          ) : !data?.items.length ? (
-            <p style={{ fontSize: 13, color: '#bbb', padding: '20px 0', textAlign: 'center' }}>
-              No auto-filtered articles.
-            </p>
-          ) : (
-            <div style={{ paddingBottom: 4 }}>
-              {data.items.map((a) => (
-                <ArchivedArticleRow key={a.id} article={a} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ArchivePage() {
@@ -348,9 +270,6 @@ export default function ArchivePage() {
           )}
         </>
       )}
-
-      {/* Auto-filtered articles (low relevance, no digest) */}
-      {!search && <FilteredGroup tenantId={tenantId} />}
 
       {/* Clarification note */}
       <p style={{ fontSize: 11, color: '#bbb', margin: 0 }}>
