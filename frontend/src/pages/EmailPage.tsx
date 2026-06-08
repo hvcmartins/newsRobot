@@ -113,7 +113,8 @@ export default function EmailPage() {
       setTestMsg('Digest sent successfully — articles moved to archive.')
       setSendNowConfirm(false)
       qc.invalidateQueries({ queryKey: ['articles', tenantId] })
-      qc.invalidateQueries({ queryKey: ['archive', tenantId] })
+      qc.invalidateQueries({ queryKey: ['article-categories', tenantId] })
+      qc.invalidateQueries({ queryKey: ['sent-digests', tenantId] })
       qc.invalidateQueries({ queryKey: ['dashboard', tenantId] })
     },
     onError: (e: Error) => {

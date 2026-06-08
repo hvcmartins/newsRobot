@@ -137,7 +137,7 @@ def send_now(tenant_id: int, db: Session = Depends(get_db)):
 def preview_email(tenant_id: int, db: Session = Depends(get_db)):
     from app.services.email.builder import build_email_context
     from app.services.email.sender import render_email
-    context = build_email_context(tenant_id, None, "preview", db, preview=True)
+    context = build_email_context(tenant_id, None, "immediate", db, preview=True)
     if not context:
         return HTMLResponse("<p style='font-family:sans-serif;padding:32px;color:#666'>No articles yet — trigger a scrape from the News Feed page to populate your digest.</p>")
     html, _ = render_email(context)
