@@ -40,7 +40,7 @@ def create_config(data: EmailConfigCreate, db: Session = Depends(get_db)):
 def update_config(tenant_id: int, data: EmailConfigUpdate,
                   db: Session = Depends(get_db)):
     cfg = _get_or_404(tenant_id, db)
-    for field, value in data.model_dump(exclude_none=True).items():
+    for field, value in data.model_dump(exclude_unset=True).items():
         if field == 'smtp_password' and value == '':
             continue  # empty string = keep existing password (UI never receives the real value)
         setattr(cfg, field, value)
