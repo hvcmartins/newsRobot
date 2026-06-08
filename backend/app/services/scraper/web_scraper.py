@@ -191,14 +191,17 @@ def _extract_date_from_item(item) -> datetime.datetime | None:
                 if dt:
                     return dt
 
-    # 5. Last resort: any leaf element (no children) with short text that parses as a date.
-    #    Catches plain-text dates in elements like Bootstrap's .card-footer.
+    # 5. Last resort: scan direct text nodes of every element (ignoring text from
+    #    child elements). This catches dates that live as plain text nodes alongside
+    #    icon elements, e.g. <div class="card-footer"><i class="e-clock"></i>08.06.2026</div>
+    from bs4 import NavigableString
     for el in item.find_all(True):
-        if el.find():   # skip non-leaf elements
-            continue
-        txt = el.get_text(strip=True)
-        if txt and 6 <= len(txt) <= 30:
-            dt = _parse_date(txt)
+        direct_text = " ".join(
+            str(c).strip() for c in el.children
+            if isinstance(c, NavigableString) and str(c).strip()
+        ).strip()
+        if direct_text and 6 <= len(direct_text) <= 30:
+            dt = _parse_date(direct_text)
             if dt:
                 return dt
 
