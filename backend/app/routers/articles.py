@@ -262,12 +262,18 @@ def reset_queue(tenant_id: int, db: Session = Depends(get_db)):
 
 @router.post("/reset/queue-for-rescrape")
 def reset_queue_for_rescrape(tenant_id: int, db: Session = Depends(get_db)):
-    """Delete non-archived articles and their scraped_url entries so they can be re-scraped fresh."""
+    """Remove stuck (unenriched) articles and their scraped_url entries so they can be re-scraped.
+
+    Only targets articles with ai_enriched=False — successfully enriched articles
+    in the queue are left untouched so they cannot be lost if the source no longer
+    carries them.
+    """
     from app.models.scraped_url import ScrapedUrl
     urls = [row[0] for row in
             db.query(Article.url)
               .filter(Article.tenant_id == tenant_id,
-                      Article.archived_at.is_(None))
+                      Article.archived_at.is_(None),
+                      Article.ai_enriched.isnot(True))
               .all()]
     cleared = 0
     if urls:
@@ -277,7 +283,8 @@ def reset_queue_for_rescrape(tenant_id: int, db: Session = Depends(get_db)):
                    .delete(synchronize_session=False))
     deleted = (db.query(Article)
                .filter(Article.tenant_id == tenant_id,
-                       Article.archived_at.is_(None))
+                       Article.archived_at.is_(None),
+                       Article.ai_enriched.isnot(True))
                .delete())
     db.commit()
     return {"deleted_articles": deleted, "cleared_urls": cleared}
