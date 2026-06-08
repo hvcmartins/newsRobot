@@ -183,7 +183,8 @@ def dashboard(tenant_id: int, db: Session = Depends(get_db)):
     pending_count = (db.query(Article)
                      .filter(Article.tenant_id == tenant_id,
                              Article.archived_at.is_(None),
-                             Article.duplicate_of_id.is_(None))
+                             Article.duplicate_of_id.is_(None),
+                             Article.ai_enriched == True)  # noqa: E712
                      .count())
 
     week_ago = datetime.datetime.utcnow() - datetime.timedelta(days=7)

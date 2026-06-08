@@ -268,6 +268,17 @@ def _enrich_article(article_id: int, topic_profile: str | None,
 
     ai = get_ai_provider()
     if isinstance(ai, NullProvider):
+        # AI is disabled — just mark enriched so the article appears in the queue
+        db = SessionLocal()
+        try:
+            article = db.get(Article, article_id)
+            if article and not article.ai_enriched:
+                article.ai_enriched = True
+                db.commit()
+        except Exception as exc:
+            logger.error("Failed to mark article %d as enriched (no AI): %s", article_id, exc)
+        finally:
+            db.close()
         return
 
     # Re-check pause here: the task may have been queued before pause was set
