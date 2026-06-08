@@ -192,8 +192,12 @@ def check_all_sources(tenant_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/{source_id}/scraped-urls", status_code=200)
 def clear_scraped_urls(source_id: int, db: Session = Depends(get_db)):
-    """Delete all scraped-URL dedup entries that came from this source's articles,
-    so the source can be re-scraped as if it were fresh."""
+    """Delete all scraped-URL dedup entries for this source so it re-scrapes fresh.
+
+    Deletes by source_id directly (covers URLs whose articles were deleted, e.g.
+    filtered out for low relevance) and falls back to matching via the Article
+    table for older entries recorded before source_id was tracked.
+    """
     from app.models import Article
     from app.models.scraped_url import ScrapedUrl
 
@@ -201,23 +205,31 @@ def clear_scraped_urls(source_id: int, db: Session = Depends(get_db)):
     if not source:
         raise HTTPException(404, "Source not found")
 
-    urls = [
+    # Primary: delete by source_id (works even when article has been deleted)
+    deleted = (
+        db.query(ScrapedUrl)
+        .filter(ScrapedUrl.source_id == source_id)
+        .delete(synchronize_session=False)
+    )
+
+    # Fallback: older rows recorded before source_id column existed (source_id IS NULL)
+    # — match via the Article table for articles that still exist.
+    legacy_urls = [
         row[0]
         for row in db.query(Article.url)
         .filter(Article.source_id == source_id, Article.url.isnot(None))
         .all()
     ]
-    if urls:
-        deleted = (
+    if legacy_urls:
+        deleted += (
             db.query(ScrapedUrl)
-            .filter(ScrapedUrl.tenant_id == source.tenant_id,
-                    ScrapedUrl.url.in_(urls))
+            .filter(ScrapedUrl.source_id.is_(None),
+                    ScrapedUrl.tenant_id == source.tenant_id,
+                    ScrapedUrl.url.in_(legacy_urls))
             .delete(synchronize_session=False)
         )
-        db.commit()
-    else:
-        deleted = 0
 
+    db.commit()
     logger.info("Cleared %d scraped-url entries for source %d ('%s')",
                 deleted, source_id, source.name)
     return {"cleared": deleted, "source_id": source_id}

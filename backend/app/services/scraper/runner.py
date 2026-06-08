@@ -193,11 +193,12 @@ def _is_near_duplicate(article: ScrapedArticle, recent_articles: list[Article],
     return None
 
 
-def _record_scraped_url(db: Session, tenant_id: int, url: str) -> None:
+def _record_scraped_url(db: Session, tenant_id: int, url: str,
+                        source_id: int | None = None) -> None:
     """Insert into scraped_urls using a savepoint so failure doesn't roll back the session."""
     try:
         with db.begin_nested():
-            db.add(ScrapedUrl(tenant_id=tenant_id, url=url))
+            db.add(ScrapedUrl(tenant_id=tenant_id, source_id=source_id, url=url))
     except IntegrityError:
         pass  # Already recorded
 
@@ -499,7 +500,7 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
                     db.add(db_article)
             except IntegrityError:
                 continue  # URL collision — _is_url_seen missed it; skip safely
-            _record_scraped_url(db, source.tenant_id, art.url)
+            _record_scraped_url(db, source.tenant_id, art.url, source.id)
             new_count += 1
             new_article_ids.append(db_article.id)
             recent.append(db_article)
