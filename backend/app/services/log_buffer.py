@@ -23,10 +23,13 @@ _AI_NAMES = ("ai", "llama", "claude", "openai", "ollama", "enrichment")
 _SCRAPER_NAMES = ("scraper", "rss", "web_scraper")
 _SCHEDULER_NAMES = ("scheduler",)
 _EMAIL_NAMES = ("email", "sender", "builder")
+_QUEUE_NAMES = ("queue",)
 
 
 def _classify(name: str) -> str:
     lower = name.lower()
+    if any(f in lower for f in _QUEUE_NAMES):
+        return "queue"
     if any(f in lower for f in _AI_NAMES):
         return "ai"
     if any(f in lower for f in _SCRAPER_NAMES):

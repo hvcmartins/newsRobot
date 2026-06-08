@@ -11,7 +11,7 @@ const LEVEL_STYLE: Record<string, React.CSSProperties> = {
   ERROR:   { color: '#7f0000', background: '#ffebee' },
 }
 
-// ── single log line ──────────────────────────────────────────────────────────
+// ── log line (scraper / AI) ───────────────────────────────────────────────────
 function LogLine({ entry }: { entry: LogEntry }) {
   const lvl = LEVEL_STYLE[entry.level] ?? LEVEL_STYLE.INFO
   return (
@@ -35,16 +35,70 @@ function LogLine({ entry }: { entry: LogEntry }) {
   )
 }
 
-// ── panel (one column) ───────────────────────────────────────────────────────
+// ── queue line ────────────────────────────────────────────────────────────────
+// Message format: "+ Title  ·  Category  ·  75%"
+function QueueLine({ entry }: { entry: LogEntry }) {
+  const parts = entry.message.startsWith('+ ')
+    ? entry.message.slice(2).split('  ·  ')
+    : null
+
+  if (!parts || parts.length < 3) {
+    return <LogLine entry={entry} />
+  }
+
+  const [title, category, pctRaw] = parts
+  const pct = parseInt(pctRaw, 10)
+  const scoreColor = pct >= 70 ? { bg: '#e8f5e9', fg: '#2e7d32' }
+                   : pct >= 50 ? { bg: '#fff3e0', fg: '#e65100' }
+                   : { bg: '#fce4ec', fg: '#c62828' }
+
+  return (
+    <div style={{
+      display: 'flex', gap: 8, padding: '6px 10px',
+      borderBottom: '1px solid #f0f0f0', alignItems: 'flex-start',
+      background: '#fff',
+    }}>
+      <span style={{ color: '#bbb', flexShrink: 0, fontFamily: 'monospace', fontSize: 11, paddingTop: 2 }}>
+        {entry.ts}
+      </span>
+      <span style={{
+        fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 8,
+        flexShrink: 0, background: scoreColor.bg, color: scoreColor.fg,
+      }}>
+        {pct}%
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 12, fontWeight: 600, color: '#1a1a1a',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {title}
+        </div>
+        {category && category !== 'General' && (
+          <span style={{
+            display: 'inline-block', marginTop: 2,
+            fontSize: 10, color: '#555', background: '#f0f0f0',
+            borderRadius: 4, padding: '1px 6px',
+          }}>
+            {category}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── panel ─────────────────────────────────────────────────────────────────────
 interface PanelProps {
   title: string
   icon: string
   accent: string
   entries: LogEntry[]
   autoScroll: boolean
+  renderLine?: (e: LogEntry) => React.ReactNode
 }
 
-function Panel({ title, icon, accent, entries, autoScroll }: PanelProps) {
+function Panel({ title, icon, accent, entries, autoScroll, renderLine }: PanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -57,9 +111,8 @@ function Panel({ title, icon, accent, entries, autoScroll }: PanelProps) {
     <div style={{
       display: 'flex', flexDirection: 'column',
       border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden',
-      background: '#fafafa', minHeight: 0,
+      background: '#fafafa', minHeight: 0, height: '100%',
     }}>
-      {/* header */}
       <div style={{
         padding: '10px 14px', borderBottom: '1px solid #e5e7eb',
         background: '#fff', display: 'flex', alignItems: 'center', gap: 8,
@@ -75,14 +128,13 @@ function Panel({ title, icon, accent, entries, autoScroll }: PanelProps) {
         </span>
       </div>
 
-      {/* log lines */}
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
         {entries.length === 0 ? (
           <div style={{ padding: 24, textAlign: 'center', color: '#bbb', fontSize: 13 }}>
-            No activity yet — trigger a scrape or wait for a scheduled run.
+            No activity yet.
           </div>
         ) : (
-          entries.map(e => <LogLine key={e.id} entry={e} />)
+          entries.map(e => renderLine ? renderLine(e) : <LogLine key={e.id} entry={e} />)
         )}
         <div ref={bottomRef} />
       </div>
@@ -90,7 +142,7 @@ function Panel({ title, icon, accent, entries, autoScroll }: PanelProps) {
   )
 }
 
-// ── main page ────────────────────────────────────────────────────────────────
+// ── page ──────────────────────────────────────────────────────────────────────
 export default function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [live, setLive] = useState(true)
@@ -110,17 +162,15 @@ export default function LogsPage() {
         })
       }
     } catch {
-      // silently skip on error — don't spam the user
+      // silently skip
     }
   }, [])
 
-  // initial load (get all history)
   useEffect(() => {
     lastIdRef.current = 0
     fetchLogs()
   }, [fetchLogs])
 
-  // live polling
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current)
     if (live) {
@@ -137,14 +187,14 @@ export default function LogsPage() {
 
   const scraperLogs = logs.filter(e => e.source === 'scraper' || e.source === 'scheduler' || e.source === 'email')
   const aiLogs     = logs.filter(e => e.source === 'ai')
+  const queueLogs  = logs.filter(e => e.source === 'queue')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 120px)' }}>
       {/* toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Live Activity Log</h1>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          {/* live indicator */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{
               width: 8, height: 8, borderRadius: '50%',
@@ -175,11 +225,8 @@ export default function LogsPage() {
         </div>
       </div>
 
-      {/* two panels */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16,
-        height: 'calc(100vh - 190px)',
-      }}>
+      {/* top row: Scraper + AI */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, flex: 1, minHeight: 0 }}>
         <Panel
           title="Scraper &amp; Scheduler"
           icon="🤖"
@@ -196,7 +243,19 @@ export default function LogsPage() {
         />
       </div>
 
-      <p style={{ fontSize: 11, color: '#aaa', margin: 0 }}>
+      {/* bottom row: News Queue */}
+      <div style={{ flex: '0 0 240px', minHeight: 0 }}>
+        <Panel
+          title="News Queue"
+          icon="📥"
+          accent="#059669"
+          entries={queueLogs}
+          autoScroll={live}
+          renderLine={(e) => <QueueLine key={e.id} entry={e} />}
+        />
+      </div>
+
+      <p style={{ fontSize: 11, color: '#aaa', margin: 0, flexShrink: 0 }}>
         Polling every {POLL_MS / 1000}s · last {MAX_ENTRIES.toLocaleString()} lines kept · only INFO and above shown
       </p>
     </div>

@@ -4,7 +4,7 @@ export interface LogEntry {
   id: number
   ts: string
   level: 'INFO' | 'WARNING' | 'ERROR'
-  source: 'scraper' | 'scheduler' | 'ai' | 'email' | 'general'
+  source: 'scraper' | 'scheduler' | 'ai' | 'email' | 'queue' | 'general'
   message: string
 }
 

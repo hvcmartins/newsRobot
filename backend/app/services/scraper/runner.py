@@ -367,6 +367,15 @@ def _enrich_article(article_id: int, topic_profile: str | None,
         article.ai_enriched = True
         db.commit()
         record_article(time.monotonic() - t_article_start)
+
+        import logging as _qlog
+        _q = _qlog.getLogger("app.services.queue")
+        _q.info(
+            "+ %s  ·  %s  ·  %d%%",
+            a_title[:90],
+            result.category or "General",
+            round(result.score * 100),
+        )
     except Exception as exc:
         logger.error("Enrichment failed for article %d: %s", article_id, exc)
     finally:
