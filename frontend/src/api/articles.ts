@@ -11,6 +11,7 @@ export interface ArticleFilters {
   is_read?: boolean
   archived?: boolean
   digest_id?: number
+  undigested?: boolean
   page?: number
   size?: number
 }

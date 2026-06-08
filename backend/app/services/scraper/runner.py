@@ -333,15 +333,15 @@ def _enrich_article(article_id: int, topic_profile: str | None,
             return  # deleted between phases — nothing to do
 
         if topic_profile and result.score < 0.5:
-            article_url = article.url
-            article_tenant_id = article.tenant_id
-            db.query(Article).filter(Article.id == article_id).delete()
-            # Remove from scraped_urls so re-scraping after profile changes works
-            db.query(ScrapedUrl).filter_by(
-                tenant_id=article_tenant_id, url=article_url
-            ).delete()
+            # Archive immediately rather than delete so the article is preserved
+            # in history and won't be re-scraped on future runs.
+            article.ai_enriched = True
+            article.relevance_score = result.score
+            article.relevance_reason = result.reason
+            article.category = result.category
+            article.archived_at = datetime.datetime.utcnow()
             db.commit()
-            ai_log.info("Deleted low-relevance article (%.2f): '%s'",
+            ai_log.info("Auto-archived low-relevance article (%.2f): '%s'",
                         result.score, title_short)
             return
 
