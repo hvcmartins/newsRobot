@@ -5,6 +5,7 @@ import { parseUTC } from '@/utils/dates'
 import { useTenant } from '@/contexts/TenantContext'
 import { articleApi } from '@/api/articles'
 import { sourceApi } from '@/api/sources'
+import { scrapeRunApi } from '@/api/scrapeRuns'
 import ArticleFeed from '@/components/articles/ArticleFeed'
 import ArticleFilters, { Filters } from '@/components/articles/ArticleFilters'
 
@@ -81,6 +82,27 @@ export default function ArticlesPage() {
     },
   })
 
+  const [refreshLabel, setRefreshLabel] = useState<'idle' | 'scraping' | 'enriching' | 'done'>('idle')
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshLabel !== 'idle') return
+    try {
+      setRefreshLabel('scraping')
+      await scrapeRunApi.triggerFull(tenantId)
+      setRefreshLabel('enriching')
+      await articleApi.triggerEnrich(tenantId)
+      setRefreshLabel('done')
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ['articles', tenantId] })
+        qc.invalidateQueries({ queryKey: ['article-categories', tenantId] })
+        qc.invalidateQueries({ queryKey: ['dashboard', tenantId] })
+        setRefreshLabel('idle')
+      }, 3_000)
+    } catch {
+      setRefreshLabel('idle')
+    }
+  }, [tenantId, refreshLabel, qc])
+
   const missingImageCount = (data?.items ?? []).filter((a) => !a.image_url).length
 
   const handleFilterChange = useCallback((f: Filters) => setFilters(f), [])
@@ -115,25 +137,43 @@ export default function ArticlesPage() {
             )}
           </p>
         </div>
-        {missingImageCount > 0 && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, marginTop: 4 }}>
+          {missingImageCount > 0 && (
+            <button
+              onClick={() => fetchMissingImagesMut.mutate()}
+              disabled={fetchMissingImagesMut.isPending || fetchMissingImagesMut.isSuccess}
+              style={{
+                padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                border: '1px solid #e0e0e0', cursor: fetchMissingImagesMut.isPending || fetchMissingImagesMut.isSuccess ? 'default' : 'pointer',
+                background: fetchMissingImagesMut.isSuccess ? '#f0fdf4' : '#fff',
+                color: fetchMissingImagesMut.isSuccess ? '#16a34a' : '#555',
+              }}
+            >
+              {fetchMissingImagesMut.isPending
+                ? 'Queuing…'
+                : fetchMissingImagesMut.isSuccess
+                  ? `✓ Fetching ${fetchMissingImagesMut.data?.queued ?? missingImageCount} images`
+                  : `🖼 Fetch ${missingImageCount} missing image${missingImageCount !== 1 ? 's' : ''}`}
+            </button>
+          )}
           <button
-            onClick={() => fetchMissingImagesMut.mutate()}
-            disabled={fetchMissingImagesMut.isPending || fetchMissingImagesMut.isSuccess}
+            onClick={handleRefresh}
+            disabled={refreshLabel !== 'idle'}
             style={{
-              flexShrink: 0, marginTop: 4,
               padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-              border: '1px solid #e0e0e0', cursor: fetchMissingImagesMut.isPending || fetchMissingImagesMut.isSuccess ? 'default' : 'pointer',
-              background: fetchMissingImagesMut.isSuccess ? '#f0fdf4' : '#fff',
-              color: fetchMissingImagesMut.isSuccess ? '#16a34a' : '#555',
+              border: '1px solid var(--brand-color)',
+              cursor: refreshLabel !== 'idle' ? 'default' : 'pointer',
+              background: refreshLabel === 'done' ? '#f0fdf4' : 'var(--brand-color)',
+              color: refreshLabel === 'done' ? '#16a34a' : '#fff',
+              opacity: refreshLabel !== 'idle' ? 0.8 : 1,
             }}
           >
-            {fetchMissingImagesMut.isPending
-              ? 'Queuing…'
-              : fetchMissingImagesMut.isSuccess
-                ? `✓ Fetching ${fetchMissingImagesMut.data?.queued ?? missingImageCount} images`
-                : `🖼 Fetch ${missingImageCount} missing image${missingImageCount !== 1 ? 's' : ''}`}
+            {refreshLabel === 'scraping' ? 'Scraping…'
+              : refreshLabel === 'enriching' ? 'Enriching…'
+              : refreshLabel === 'done' ? '✓ Refreshed'
+              : '↺ Re-scrape & Enrich'}
           </button>
-        )}
+        </div>
       </div>
 
       <ArticleFilters

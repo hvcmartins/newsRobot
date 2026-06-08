@@ -333,10 +333,18 @@ def _enrich_article(article_id: int, topic_profile: str | None,
             return  # deleted between phases — nothing to do
 
         if topic_profile and result.score < 0.5:
-            db.delete(article)
-            db.commit()
-            ai_log.info("Deleted low-relevance article (%.2f): '%s'",
-                        result.score, title_short)
+            if article.archived_at:
+                # Already archived (sent in an email) — update scores but keep
+                article.ai_enriched = True
+                article.relevance_score = result.score
+                article.relevance_reason = result.reason
+                article.category = result.category
+                db.commit()
+            else:
+                db.delete(article)
+                db.commit()
+                ai_log.info("Deleted low-relevance article (%.2f): '%s'",
+                            result.score, title_short)
             return
 
         if topic_profile:
