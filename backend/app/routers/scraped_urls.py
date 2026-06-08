@@ -189,21 +189,38 @@ def delete_scraped_url(
 class BulkDeleteBody(BaseModel):
     ids: list[int]
     tenant_id: int
+    delete_articles: bool = False
 
 
 @router.post("/bulk-delete", status_code=200)
 def bulk_delete_scraped_urls(body: BulkDeleteBody, db: Session = Depends(get_db)):
+    # Fetch URLs for the requested rows (needed to delete matching articles)
+    rows = (
+        db.query(ScrapedUrl)
+        .filter(ScrapedUrl.id.in_(body.ids), ScrapedUrl.tenant_id == body.tenant_id)
+        .all()
+    )
+    urls = [r.url for r in rows]
+
+    articles_deleted = 0
+    if body.delete_articles and urls:
+        articles_deleted = (
+            db.query(Article)
+            .filter(Article.tenant_id == body.tenant_id, Article.url.in_(urls))
+            .delete(synchronize_session=False)
+        )
+
     deleted = (
         db.query(ScrapedUrl)
-        .filter(
-            ScrapedUrl.id.in_(body.ids),
-            ScrapedUrl.tenant_id == body.tenant_id,
-        )
+        .filter(ScrapedUrl.id.in_(body.ids), ScrapedUrl.tenant_id == body.tenant_id)
         .delete(synchronize_session=False)
     )
     db.commit()
-    logger.info("Bulk-deleted %d scraped URL entries for tenant %d", deleted, body.tenant_id)
-    return {"deleted": deleted}
+    logger.info(
+        "Bulk-deleted %d scraped URL entries (%d articles) for tenant %d",
+        deleted, articles_deleted, body.tenant_id,
+    )
+    return {"deleted": deleted, "articles_deleted": articles_deleted}
 
 
 @router.delete("/", status_code=200)

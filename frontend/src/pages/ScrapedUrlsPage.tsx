@@ -193,8 +193,14 @@ export default function ScrapedUrlsPage() {
   }, [deleteMut])
 
   const bulkDeleteMut = useMutation({
-    mutationFn: (ids: number[]) => scrapedUrlsApi.bulkDelete(ids, tenantId!),
-    onSuccess: () => { invalidate(); setSelected(new Set()) },
+    mutationFn: (ids: number[]) => scrapedUrlsApi.bulkDelete(ids, tenantId!, true),
+    onSuccess: (res) => {
+      invalidate()
+      setSelected(new Set())
+      if (res.articles_deleted > 0) {
+        alert(`Removed ${res.deleted} URL entries and ${res.articles_deleted} article${res.articles_deleted !== 1 ? 's' : ''}. These URLs can now be re-scraped.`)
+      }
+    },
   })
 
   const [clearing, setClearing] = useState(false)
@@ -273,7 +279,13 @@ export default function ScrapedUrlsPage() {
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           {selected.size > 0 && (
             <button
-              onClick={() => bulkDeleteMut.mutate([...selected])}
+              onClick={() => {
+                if (!confirm(
+                  `Remove ${selected.size} selected URL entr${selected.size !== 1 ? 'ies' : 'y'} and their associated articles?\n\n` +
+                  `This allows those URLs to be scraped fresh on the next run.`
+                )) return
+                bulkDeleteMut.mutate([...selected])
+              }}
               disabled={bulkDeleteMut.isPending}
               style={{
                 padding: '7px 14px', border: '1px solid #fca5a5', borderRadius: 6,

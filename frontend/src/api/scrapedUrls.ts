@@ -31,8 +31,11 @@ export const scrapedUrlsApi = {
       { params: { tenant_id: tenantId, delete_article: deleteArticle } }
     ).then((r) => r.data),
 
-  bulkDelete: (ids: number[], tenantId: number) =>
-    client.post<{ deleted: number }>('/api/scraped-urls/bulk-delete', { ids, tenant_id: tenantId }).then((r) => r.data),
+  bulkDelete: (ids: number[], tenantId: number, deleteArticles = false) =>
+    client.post<{ deleted: number; articles_deleted: number }>(
+      '/api/scraped-urls/bulk-delete',
+      { ids, tenant_id: tenantId, delete_articles: deleteArticles },
+    ).then((r) => r.data),
 
   clear: (tenantId: number, sourceId?: number) =>
     client.delete<{ deleted: number }>('/api/scraped-urls/', {
