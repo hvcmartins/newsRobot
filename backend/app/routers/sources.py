@@ -132,13 +132,16 @@ def delete_source(source_id: int, db: Session = Depends(get_db)):
         sub = db.query(Article.id).filter(Article.source_id == source_id).subquery()
         db.query(Article).filter(Article.duplicate_of_id.in_(sub)).update(
             {Article.duplicate_of_id: None}, synchronize_session=False)
-        # Remove scraped-URL dedup records for this source's articles
-        urls = [r[0] for r in db.query(Article.url)
+        # Remove scraped-URL dedup records: by source_id (new rows) + URL match (legacy)
+        db.query(ScrapedUrl).filter(ScrapedUrl.source_id == source_id).delete(
+            synchronize_session=False)
+        legacy_urls = [r[0] for r in db.query(Article.url)
                 .filter(Article.source_id == source_id, Article.url.isnot(None)).all()]
-        if urls:
+        if legacy_urls:
             db.query(ScrapedUrl).filter(
+                ScrapedUrl.source_id.is_(None),
                 ScrapedUrl.tenant_id == source.tenant_id,
-                ScrapedUrl.url.in_(urls),
+                ScrapedUrl.url.in_(legacy_urls),
             ).delete(synchronize_session=False)
         # Delete articles, then the source
         db.query(Article).filter(Article.source_id == source_id).delete(
@@ -188,6 +191,79 @@ def check_all_sources(tenant_id: int, db: Session = Depends(get_db)):
     logger.info("check-all: %d/%d online for tenant %d",
                 sum(1 for r in results if r.get("online")), len(results), tenant_id)
     return {"results": results}
+
+
+@router.get("/{source_id}/scraped-urls")
+def list_scraped_urls(
+    source_id: int,
+    q: str = "",
+    page: int = 1,
+    size: int = 50,
+    db: Session = Depends(get_db),
+):
+    """List scraped-URL dedup entries for a source with optional search and pagination."""
+    from app.models import Article
+    from app.models.scraped_url import ScrapedUrl
+    from sqlalchemy import or_, and_
+
+    source = db.get(Source, source_id)
+    if not source:
+        raise HTTPException(404, "Source not found")
+
+    # Include new entries (have source_id) and legacy entries (source_id IS NULL
+    # but URL exists in this source's articles).
+    article_url_subq = (
+        db.query(Article.url)
+        .filter(Article.source_id == source_id, Article.url.isnot(None))
+        .subquery()
+    )
+    base = db.query(ScrapedUrl).filter(
+        ScrapedUrl.tenant_id == source.tenant_id,
+        or_(
+            ScrapedUrl.source_id == source_id,
+            and_(
+                ScrapedUrl.source_id.is_(None),
+                ScrapedUrl.url.in_(article_url_subq),
+            ),
+        ),
+    )
+    if q:
+        base = base.filter(ScrapedUrl.url.ilike(f"%{q}%"))
+
+    total = base.count()
+    items = (
+        base.order_by(ScrapedUrl.scraped_at.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+        .all()
+    )
+    return {
+        "total": total,
+        "page": page,
+        "size": size,
+        "items": [
+            {"id": u.id, "url": u.url, "scraped_at": u.scraped_at.isoformat() if u.scraped_at else None}
+            for u in items
+        ],
+    }
+
+
+@router.delete("/{source_id}/scraped-urls/{url_id}", status_code=200)
+def delete_scraped_url(source_id: int, url_id: int, db: Session = Depends(get_db)):
+    """Delete a single scraped-URL entry by its ID, allowing that URL to be re-scraped."""
+    from app.models.scraped_url import ScrapedUrl
+
+    source = db.get(Source, source_id)
+    if not source:
+        raise HTTPException(404, "Source not found")
+
+    row = db.get(ScrapedUrl, url_id)
+    if not row or row.tenant_id != source.tenant_id:
+        raise HTTPException(404, "Entry not found")
+
+    db.delete(row)
+    db.commit()
+    return {"deleted": 1, "url_id": url_id}
 
 
 @router.delete("/{source_id}/scraped-urls", status_code=200)

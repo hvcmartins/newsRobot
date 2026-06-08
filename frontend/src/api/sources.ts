@@ -30,6 +30,10 @@ export const sourceApi = {
     client.post(`/api/scrape-runs/trigger`, null, { params: { tenant_id: tenantId } }).then((r) => r.data),
   clearScrapedUrls: (sourceId: number) =>
     client.delete<{ cleared: number }>(`/api/sources/${sourceId}/scraped-urls`).then((r) => r.data),
+  listScrapedUrls: (sourceId: number, page = 1, size = 50, q = '') =>
+    client.get<ScrapedUrlPage>(`/api/sources/${sourceId}/scraped-urls`, { params: { page, size, q } }).then((r) => r.data),
+  deleteScrapedUrl: (sourceId: number, urlId: number) =>
+    client.delete<{ deleted: number }>(`/api/sources/${sourceId}/scraped-urls/${urlId}`).then((r) => r.data),
   importCsv: (tenantId: number, file: File) => {
     const fd = new FormData()
     fd.append('file', file)
@@ -41,6 +45,19 @@ export const sourceApi = {
       )
       .then((r) => r.data)
   },
+}
+
+export interface ScrapedUrlEntry {
+  id: number
+  url: string
+  scraped_at: string | null
+}
+
+export interface ScrapedUrlPage {
+  total: number
+  page: number
+  size: number
+  items: ScrapedUrlEntry[]
 }
 
 export interface CsvImportRows {

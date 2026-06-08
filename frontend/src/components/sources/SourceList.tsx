@@ -8,6 +8,7 @@ import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import SourceForm from './SourceForm'
 import SourceTestResult from './SourceTestResult'
+import ScrapedUrlsModal from './ScrapedUrlsModal'
 import { formatDistanceToNow } from 'date-fns'
 
 interface Props {
@@ -25,6 +26,7 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
   const [scraping, setScraping] = useState<number | null>(null)
   const [scraped, setScraped] = useState<Set<number>>(new Set())
   const [clearing, setClearing] = useState<number | null>(null)
+  const [viewingUrls, setViewingUrls] = useState<Source | null>(null)
 
   const deleteMut = useMutation({
     mutationFn: sourceApi.delete,
@@ -154,6 +156,15 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
                     <Button
                       size="sm"
                       variant="ghost"
+                      onClick={() => setViewingUrls(s)}
+                      title="View and manage seen URLs for this source"
+                      style={{ color: '#555', border: '1px solid #ddd', padding: '4px 8px' }}
+                    >
+                      URLs
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
                       loading={clearing === s.id}
                       onClick={() => handleClearScrapedUrls(s.id, s.name)}
                       title="Reset seen URLs so next scrape re-evaluates all articles"
@@ -189,6 +200,13 @@ export default function SourceList({ sources, tenantId, checkResults, checkingAl
             await updateMut.mutateAsync({ id: editing.id, data })
           }}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {viewingUrls && (
+        <ScrapedUrlsModal
+          source={viewingUrls}
+          onClose={() => setViewingUrls(null)}
         />
       )}
     </>
