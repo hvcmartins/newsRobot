@@ -44,22 +44,30 @@ def build_email_context(tenant_id: int, articles: list | None,
 
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
 
-        query = (db.query(Article)
-                 .filter(Article.tenant_id == tenant_id,
-                         Article.duplicate_of_id.is_(None),
-                         Article.archived_at.is_(None),
-                         Article.ai_enriched == True))  # noqa: E712
-        if frequency != "immediate":
-            query = query.filter(Article.scraped_at >= cutoff)
+        base_q = (db.query(Article)
+                  .filter(Article.tenant_id == tenant_id,
+                          Article.duplicate_of_id.is_(None),
+                          Article.archived_at.is_(None),
+                          Article.ai_enriched == True))  # noqa: E712
 
-        all_pending = (query
-                       .order_by(Article.relevance_score.desc(),
-                                 Article.published_at.desc())
-                       .limit(500)
-                       .all())
+        # Fetch ALL pending articles for archiving — no cutoff so that articles
+        # older than the lookback window don't accumulate in the queue forever.
+        all_to_archive = (base_q
+                          .order_by(Article.relevance_score.desc(),
+                                    Article.published_at.desc())
+                          .limit(500)
+                          .all())
+
+        # Email candidates: only articles within the lookback window appear in the email.
+        if frequency != "immediate":
+            all_pending = [a for a in all_to_archive
+                           if a.scraped_at and a.scraped_at >= cutoff]
+        else:
+            all_pending = all_to_archive
 
         max_n = config.max_articles_per_digest if config and config.max_articles_per_digest else None
     else:
+        all_to_archive = articles
         all_pending = articles
         max_n = None
 
@@ -108,7 +116,7 @@ def build_email_context(tenant_id: int, articles: list | None,
         "primary_color":            tenant.primary_color or "#0066cc",
         "intro_text":               (config.intro_text if config else "") or "",
         "articles":                 articles,
-        "all_pending_articles":     all_pending,
+        "all_pending_articles":     all_to_archive,
         "total_pending":            total_pending,
         "articles_by_category":     articles_by_category,
         "has_categories":           has_categories,
