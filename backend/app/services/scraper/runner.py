@@ -203,16 +203,31 @@ def _record_scraped_url(db: Session, tenant_id: int, url: str,
         pass  # Already recorded
 
 
-def _is_url_seen(db: Session, tenant_id: int, url: str) -> bool:
+def _is_url_seen(db: Session, tenant_id: int, url: str,
+                 source_id: int | None = None) -> bool:
     """Return True if the URL was already scraped for this tenant.
 
     Checks scraped_urls first, then falls back to the articles table so that
     articles ingested before the scraped_urls table existed are also recognised
     as duplicates (prevents IntegrityError cascade-rollbacks on the session).
+
+    When found only via the Article fallback, backfills a ScrapedUrl row so
+    future look-ups and the Sources → Seen URLs modal can find the entry.
     """
     if db.query(ScrapedUrl.id).filter_by(tenant_id=tenant_id, url=url).first():
         return True
-    if db.query(Article.id).filter_by(tenant_id=tenant_id, url=url).first():
+    article = db.query(Article).filter_by(tenant_id=tenant_id, url=url).first()
+    if article:
+        # Backfill into scraped_urls so the modal and resets track it correctly
+        try:
+            with db.begin_nested():
+                db.add(ScrapedUrl(
+                    tenant_id=tenant_id,
+                    source_id=article.source_id,
+                    url=url,
+                ))
+        except Exception:
+            pass
         return True
     return False
 
@@ -451,7 +466,7 @@ def run_source(source_id: int, db: Session) -> ScrapeRun:
                 logger.debug("Skipping undated web article: '%s'", art.title[:70])
                 age_skipped += 1
                 continue
-            if _is_url_seen(db, source.tenant_id, art.url):
+            if _is_url_seen(db, source.tenant_id, art.url, source.id):
                 url_skipped += 1
                 continue
             candidates.append(art)

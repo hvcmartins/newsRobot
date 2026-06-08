@@ -204,14 +204,17 @@ def list_scraped_urls(
     """List scraped-URL dedup entries for a source with optional search and pagination."""
     from app.models import Article
     from app.models.scraped_url import ScrapedUrl
-    from sqlalchemy import or_, and_
+    from sqlalchemy import or_
 
     source = db.get(Source, source_id)
     if not source:
         raise HTTPException(404, "Source not found")
 
-    # Include new entries (have source_id) and legacy entries (source_id IS NULL
-    # but URL exists in this source's articles).
+    # Show every ScrapedUrl entry for this tenant that would block re-scraping:
+    # 1. Directly attributed to this source (source_id match)
+    # 2. Any entry whose URL appears in this source's Article records (covers legacy
+    #    NULL source_id rows AND cross-source duplicates where another source already
+    #    scraped the same external URL)
     article_url_subq = (
         db.query(Article.url)
         .filter(Article.source_id == source_id, Article.url.isnot(None))
@@ -221,10 +224,7 @@ def list_scraped_urls(
         ScrapedUrl.tenant_id == source.tenant_id,
         or_(
             ScrapedUrl.source_id == source_id,
-            and_(
-                ScrapedUrl.source_id.is_(None),
-                ScrapedUrl.url.in_(article_url_subq),
-            ),
+            ScrapedUrl.url.in_(article_url_subq),
         ),
     )
     if q:
