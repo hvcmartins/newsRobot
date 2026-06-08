@@ -82,11 +82,13 @@ export default function ArticlesPage() {
     },
   })
 
-  const [refreshLabel, setRefreshLabel] = useState<'idle' | 'scraping' | 'enriching' | 'done'>('idle')
+  const [refreshLabel, setRefreshLabel] = useState<'idle' | 'clearing' | 'scraping' | 'enriching' | 'done'>('idle')
 
   const handleRefresh = useCallback(async () => {
     if (refreshLabel !== 'idle') return
     try {
+      setRefreshLabel('clearing')
+      await articleApi.resetQueueForRescrape(tenantId)
       setRefreshLabel('scraping')
       await scrapeRunApi.triggerFull(tenantId)
       setRefreshLabel('enriching')
@@ -168,7 +170,8 @@ export default function ArticlesPage() {
               opacity: refreshLabel !== 'idle' ? 0.8 : 1,
             }}
           >
-            {refreshLabel === 'scraping' ? 'Scraping…'
+            {refreshLabel === 'clearing' ? 'Clearing…'
+              : refreshLabel === 'scraping' ? 'Scraping…'
               : refreshLabel === 'enriching' ? 'Enriching…'
               : refreshLabel === 'done' ? '✓ Refreshed'
               : '↺ Re-scrape & Enrich'}

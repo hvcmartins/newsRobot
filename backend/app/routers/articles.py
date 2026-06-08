@@ -260,6 +260,29 @@ def reset_queue(tenant_id: int, db: Session = Depends(get_db)):
     return {"deleted": count}
 
 
+@router.post("/reset/queue-for-rescrape")
+def reset_queue_for_rescrape(tenant_id: int, db: Session = Depends(get_db)):
+    """Delete non-archived articles and their scraped_url entries so they can be re-scraped fresh."""
+    from app.models.scraped_url import ScrapedUrl
+    urls = [row[0] for row in
+            db.query(Article.url)
+              .filter(Article.tenant_id == tenant_id,
+                      Article.archived_at.is_(None))
+              .all()]
+    cleared = 0
+    if urls:
+        cleared = (db.query(ScrapedUrl)
+                   .filter(ScrapedUrl.tenant_id == tenant_id,
+                           ScrapedUrl.url.in_(urls))
+                   .delete(synchronize_session=False))
+    deleted = (db.query(Article)
+               .filter(Article.tenant_id == tenant_id,
+                       Article.archived_at.is_(None))
+               .delete())
+    db.commit()
+    return {"deleted_articles": deleted, "cleared_urls": cleared}
+
+
 @router.delete("/reset/archive")
 def reset_archive(tenant_id: int, db: Session = Depends(get_db)):
     count = (db.query(Article)

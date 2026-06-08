@@ -53,4 +53,8 @@ export const articleApi = {
     client.delete('/api/articles/reset/archive', { params: { tenant_id: tenantId } }).then((r) => r.data),
   resetScrapedUrls: (tenantId: number) =>
     client.delete('/api/articles/reset/scraped-urls', { params: { tenant_id: tenantId } }).then((r) => r.data),
+  resetQueueForRescrape: (tenantId: number) =>
+    client.post<{ deleted_articles: number; cleared_urls: number }>(
+      '/api/articles/reset/queue-for-rescrape', null, { params: { tenant_id: tenantId } }
+    ).then((r) => r.data),
 }
