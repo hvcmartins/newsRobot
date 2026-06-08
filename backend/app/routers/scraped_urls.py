@@ -5,20 +5,25 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Source
+from app.models import Source, Article
 from app.models.scraped_url import ScrapedUrl
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _row_to_dict(row: ScrapedUrl, source_map: dict) -> dict:
+def _row_to_dict(row: ScrapedUrl, source_map: dict, article_map: dict) -> dict:
+    art = article_map.get(row.url)
     return {
         "id": row.id,
         "url": row.url,
         "source_id": row.source_id,
         "source_name": source_map.get(row.source_id) if row.source_id else None,
         "scraped_at": row.scraped_at.isoformat() if row.scraped_at else None,
+        # article_id / article_archived let the UI warn that removing this
+        # entry won't allow re-scraping until the article itself is deleted.
+        "article_id": art["id"] if art else None,
+        "article_archived": art["archived"] if art else None,
     }
 
 
@@ -52,11 +57,24 @@ def list_scraped_urls(
         for src in db.query(Source.id, Source.name).filter(Source.id.in_(source_ids)).all():
             source_map[src.id] = src.name
 
+    # Check which URLs still have a live Article — those will still be detected
+    # as duplicates even after removing the ScrapedUrl entry.
+    page_urls = [r.url for r in rows]
+    article_map: dict = {}
+    if page_urls:
+        arts = (
+            db.query(Article.id, Article.url, Article.archived_at)
+            .filter(Article.tenant_id == tenant_id, Article.url.in_(page_urls))
+            .all()
+        )
+        for a in arts:
+            article_map[a.url] = {"id": a.id, "archived": a.archived_at is not None}
+
     return {
         "total": total,
         "page": page,
         "size": size,
-        "items": [_row_to_dict(r, source_map) for r in rows],
+        "items": [_row_to_dict(r, source_map, article_map) for r in rows],
     }
 
 
@@ -100,13 +118,24 @@ def add_scraped_url(body: AddUrlBody, db: Session = Depends(get_db)):
 
 
 @router.delete("/{url_id}", status_code=200)
-def delete_scraped_url(url_id: int, tenant_id: int, db: Session = Depends(get_db)):
+def delete_scraped_url(
+    url_id: int,
+    tenant_id: int,
+    delete_article: bool = False,
+    db: Session = Depends(get_db),
+):
     row = db.get(ScrapedUrl, url_id)
     if not row or row.tenant_id != tenant_id:
         raise HTTPException(404, "Entry not found")
+    article_deleted = 0
+    if delete_article:
+        art = db.query(Article).filter_by(tenant_id=tenant_id, url=row.url).first()
+        if art:
+            db.delete(art)
+            article_deleted = 1
     db.delete(row)
     db.commit()
-    return {"deleted": 1, "id": url_id}
+    return {"deleted": 1, "id": url_id, "article_deleted": article_deleted}
 
 
 class BulkDeleteBody(BaseModel):

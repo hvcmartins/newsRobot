@@ -6,6 +6,8 @@ export interface ScrapedUrlItem {
   source_id: number | null
   source_name: string | null
   scraped_at: string | null
+  article_id: number | null
+  article_archived: boolean | null
 }
 
 export interface ScrapedUrlPage {
@@ -22,8 +24,11 @@ export const scrapedUrlsApi = {
   add: (body: { tenant_id: number; url: string; source_id?: number | null }) =>
     client.post<ScrapedUrlItem>('/api/scraped-urls/', body).then((r) => r.data),
 
-  delete: (id: number, tenantId: number) =>
-    client.delete<{ deleted: number }>(`/api/scraped-urls/${id}`, { params: { tenant_id: tenantId } }).then((r) => r.data),
+  delete: (id: number, tenantId: number, deleteArticle = false) =>
+    client.delete<{ deleted: number; article_deleted: number }>(
+      `/api/scraped-urls/${id}`,
+      { params: { tenant_id: tenantId, delete_article: deleteArticle } }
+    ).then((r) => r.data),
 
   bulkDelete: (ids: number[], tenantId: number) =>
     client.post<{ deleted: number }>('/api/scraped-urls/bulk-delete', { ids, tenant_id: tenantId }).then((r) => r.data),

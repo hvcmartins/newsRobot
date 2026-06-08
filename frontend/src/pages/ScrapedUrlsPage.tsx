@@ -146,9 +146,25 @@ export default function ScrapedUrlsPage() {
   })
 
   const deleteMut = useMutation({
-    mutationFn: (id: number) => scrapedUrlsApi.delete(id, tenantId!),
-    onSuccess: () => { invalidate(); setSelected((s) => { s.delete(deleteMut.variables!); return new Set(s) }) },
+    mutationFn: ({ id, deleteArticle }: { id: number; deleteArticle: boolean }) =>
+      scrapedUrlsApi.delete(id, tenantId!, deleteArticle),
+    onSuccess: () => { invalidate(); setSelected((s) => { s.delete(deleteMut.variables!.id); return new Set(s) }) },
   })
+
+  const handleRemove = useCallback((row: { id: number; article_id: number | null; article_archived: boolean | null }) => {
+    if (row.article_id) {
+      const where = row.article_archived ? 'archive' : 'news queue'
+      const choice = window.confirm(
+        `This article is still in your ${where}.\n\n` +
+        `• OK  → Remove URL entry AND delete the article (allows fresh re-scrape)\n` +
+        `• Cancel → Remove URL entry only (article stays; scraper will still skip it as a duplicate)`
+      )
+      // true = user clicked OK = also delete the article
+      deleteMut.mutate({ id: row.id, deleteArticle: choice })
+    } else {
+      deleteMut.mutate({ id: row.id, deleteArticle: false })
+    }
+  }, [deleteMut])
 
   const bulkDeleteMut = useMutation({
     mutationFn: (ids: number[]) => scrapedUrlsApi.bulkDelete(ids, tenantId!),
@@ -287,7 +303,7 @@ export default function ScrapedUrlsPage() {
                   style={{ cursor: 'pointer' }}
                 />
               </th>
-              {['URL', 'Source', 'Seen', ''].map((h) => (
+              {['URL', 'Source', 'Status', 'Seen', ''].map((h) => (
                 <th key={h} style={{
                   padding: '10px 14px', textAlign: 'left', fontSize: 11,
                   fontWeight: 600, color: '#888', textTransform: 'uppercase',
@@ -299,7 +315,7 @@ export default function ScrapedUrlsPage() {
           <tbody>
             {pageItems.length === 0 && !isFetching && (
               <tr>
-                <td colSpan={5} style={{ padding: 48, textAlign: 'center', color: '#bbb', fontSize: 13 }}>
+                <td colSpan={6} style={{ padding: 48, textAlign: 'center', color: '#bbb', fontSize: 13 }}>
                   {debouncedQ || sourceFilter ? 'No entries match your filters.' : 'No seen URLs recorded yet.'}
                 </td>
               </tr>
@@ -348,13 +364,31 @@ export default function ScrapedUrlsPage() {
                     <span style={{ fontSize: 11, color: '#d1d5db' }}>—</span>
                   )}
                 </td>
+                <td style={{ padding: '8px 14px' }}>
+                  {row.article_id ? (
+                    <span style={{
+                      display: 'inline-block', fontSize: 10, fontWeight: 600,
+                      padding: '2px 7px', borderRadius: 10,
+                      background: row.article_archived ? '#f3f4f6' : '#fef9c3',
+                      color: row.article_archived ? '#6b7280' : '#854d0e',
+                    }}
+                      title={row.article_archived
+                        ? 'Article is in the archive — removing this entry alone won\'t allow re-scraping'
+                        : 'Article is in the queue — removing this entry alone won\'t allow re-scraping'}
+                    >
+                      {row.article_archived ? 'Archived' : 'In queue'}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 10, color: '#d1d5db' }}>—</span>
+                  )}
+                </td>
                 <td style={{ padding: '8px 14px', fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>
                   {row.scraped_at ? formatDistanceToNow(parseISO(row.scraped_at), { addSuffix: true }) : '—'}
                 </td>
                 <td style={{ padding: '8px 14px', textAlign: 'right' }}>
                   <button
-                    onClick={() => deleteMut.mutate(row.id)}
-                    disabled={deleteMut.isPending && deleteMut.variables === row.id}
+                    onClick={() => handleRemove(row)}
+                    disabled={deleteMut.isPending && deleteMut.variables?.id === row.id}
                     style={{
                       border: '1px solid #fca5a5', borderRadius: 4, background: '#fff',
                       color: '#dc2626', cursor: 'pointer', fontSize: 11, padding: '3px 8px',
