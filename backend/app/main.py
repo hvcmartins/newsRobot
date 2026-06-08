@@ -12,7 +12,7 @@ _BUILD_TIME = datetime.datetime.utcnow().isoformat()
 
 from app.config import settings
 from app.database import create_tables
-from app.routers import tenants, sources, articles, email_config, scrape_runs, catalog, ai_config, ai_usage, sent_digests
+from app.routers import tenants, sources, articles, email_config, scrape_runs, catalog, ai_config, ai_usage, sent_digests, scraped_urls
 from app.routers import logs as logs_router
 
 logging.basicConfig(
@@ -60,7 +60,8 @@ app.include_router(catalog.router,      prefix="/api/catalog",      tags=["catal
 app.include_router(ai_config.router,    prefix="/api/ai-config",    tags=["ai"])
 app.include_router(ai_usage.router,     prefix="/api/ai",           tags=["ai"])
 app.include_router(sent_digests.router, prefix="/api/sent-digests", tags=["digests"])
-app.include_router(logs_router.router,  prefix="/api/logs",         tags=["logs"])
+app.include_router(logs_router.router,    prefix="/api/logs",          tags=["logs"])
+app.include_router(scraped_urls.router,  prefix="/api/scraped-urls",  tags=["scraped-urls"])
 
 # Serve built React frontend — check both Docker layout and local dev layout
 _static_dir = next(

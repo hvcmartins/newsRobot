@@ -12,6 +12,7 @@ const nav = [
   { to: '/source-library', label: 'Source Library', icon: '📚' },
   { to: '/email',         label: 'Email',          icon: '✉️' },
   { to: '/run-history',   label: 'Run History',    icon: '🔁' },
+  { to: '/seen-urls',     label: 'Seen URLs',      icon: '🔍' },
   { to: '/logs',          label: 'Activity Log',   icon: '📡' },
   { to: '/ai-settings',   label: 'AI Settings',    icon: '✦' },
   { to: '/settings',      label: 'Settings',       icon: '⚙️' },

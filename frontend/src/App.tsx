@@ -12,6 +12,7 @@ import RunHistoryPage from './pages/RunHistoryPage'
 import TenantSettingsPage from './pages/TenantSettingsPage'
 import AISettingsPage from './pages/AISettingsPage'
 import LogsPage from './pages/LogsPage'
+import ScrapedUrlsPage from './pages/ScrapedUrlsPage'
 import NotFoundPage from './pages/NotFoundPage'
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="settings" element={<TenantSettingsPage />} />
             <Route path="ai-settings" element={<AISettingsPage />} />
             <Route path="logs" element={<LogsPage />} />
+            <Route path="seen-urls" element={<ScrapedUrlsPage />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
