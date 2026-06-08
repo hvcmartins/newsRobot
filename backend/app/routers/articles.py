@@ -21,6 +21,7 @@ def list_articles(
     to_date: Optional[datetime.date] = None,
     is_read: Optional[bool] = None,
     archived: Optional[bool] = None,   # None/False = pending queue; True = archive
+    digest_id: Optional[int] = None,   # fetch articles belonging to a specific digest
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=500),
     db: Session = Depends(get_db),
@@ -30,7 +31,10 @@ def list_articles(
          .filter(Article.tenant_id == tenant_id,
                  Article.duplicate_of_id.is_(None)))
 
-    if archived is True:
+    if digest_id is not None:
+        # Digest view: show all articles for this specific digest regardless of enrichment state
+        q = q.filter(Article.digest_id == digest_id)
+    elif archived is True:
         q = q.filter(Article.archived_at.isnot(None))
     else:
         # Pending queue: only show fully-enriched articles

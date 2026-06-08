@@ -10,6 +10,7 @@ export interface ArticleFilters {
   to_date?: string
   is_read?: boolean
   archived?: boolean
+  digest_id?: number
   page?: number
   size?: number
 }

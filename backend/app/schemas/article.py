@@ -27,6 +27,8 @@ class ArticleRead(ORMBase):
     is_read: bool
     ai_enriched: bool
     duplicate_of_id: Optional[int] = None
+    archived_at: Optional[UTCDatetime] = None
+    digest_id: Optional[int] = None
 
 
 class ArticleListResponse(BaseModel):

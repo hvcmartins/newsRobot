@@ -121,6 +121,23 @@ export interface ScrapeRun {
   error_message: string | null
 }
 
+export interface SentDigest {
+  id: number
+  tenant_id: number
+  sent_at: string
+  subject: string | null
+  article_count: number
+  digest_type: 'regular' | 'monthly' | 'yearly'
+}
+
+export interface SentDigestListResponse {
+  items: SentDigest[]
+  total: number
+  page: number
+  size: number
+  pages: number
+}
+
 export interface ScrapeRunListResponse {
   items: ScrapeRun[]
   total: number
