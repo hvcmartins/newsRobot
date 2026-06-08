@@ -254,6 +254,15 @@ def _enrich_article(article_id: int, topic_profile: str | None,
         a_image_url = article.image_url
         a_embedding = article.title_embedding
         a_tenant_id = article.tenant_id
+        # Load the configured deletion threshold (defaults to 0.3 if not set)
+        try:
+            from app.models.ai_config import AIConfig as _AIConfig
+            ai_cfg = db.query(_AIConfig).first()
+            a_threshold = float(ai_cfg.relevance_threshold) if (
+                ai_cfg and ai_cfg.relevance_threshold is not None
+            ) else 0.3
+        except Exception:
+            a_threshold = 0.3
     finally:
         db.close()
 
@@ -334,7 +343,7 @@ def _enrich_article(article_id: int, topic_profile: str | None,
         if not article:
             return  # deleted between phases — nothing to do
 
-        if topic_profile and result.score < 0.5:
+        if topic_profile and result.score < a_threshold:
             if article.archived_at:
                 # Already archived (sent in an email) — update scores but keep
                 article.ai_enriched = True

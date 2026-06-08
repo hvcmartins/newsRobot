@@ -74,6 +74,7 @@ def _migrate():
     _add_column_if_missing("email_configs", "send_days", "TEXT")
     _add_column_if_missing("email_configs", "max_articles_per_digest", "INTEGER")
     _add_column_if_missing("scraped_urls", "source_id", "INTEGER REFERENCES sources(id) ON DELETE SET NULL")
+    _add_column_if_missing("ai_config", "relevance_threshold", "REAL DEFAULT 0.3")
     # Indexes for columns added after initial schema creation
     _ensure_index("articles", "ai_enriched")
     _ensure_index("articles", "is_read")

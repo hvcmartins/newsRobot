@@ -14,6 +14,7 @@ class AIConfigUpdate(BaseModel):
     serper_api_key: Optional[str] = None
     google_search_api_key: Optional[str] = None   # legacy
     google_search_cx: Optional[str] = None        # legacy
+    relevance_threshold: float = 0.3              # articles below this score are deleted (0.0–0.9)
 
 
 class AIConfigRead(BaseModel):
@@ -28,3 +29,4 @@ class AIConfigRead(BaseModel):
     serper_api_key_set: bool = False
     google_search_api_key_set: bool = False
     google_search_cx: Optional[str] = None
+    relevance_threshold: float = 0.3

@@ -149,6 +149,7 @@ export default function AISettingsPage() {
   const [serperKey, setSerperKey] = useState('')
   const [googleKey, setGoogleKey] = useState('')
   const [googleCx, setGoogleCx] = useState('')
+  const [relevanceThreshold, setRelevanceThreshold] = useState(0.3)
   const [saved, setSaved] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [testing, setTesting] = useState(false)
@@ -163,6 +164,7 @@ export default function AISettingsPage() {
     setCpuLimit(current.cpu_limit_percent ?? 80)
     setNGpuLayers(current.n_gpu_layers ?? -1)
     setGoogleCx(current.google_search_cx ?? '')
+    setRelevanceThreshold(current.relevance_threshold ?? 0.3)
     setApiKey('')
     setSerperKey('')
     setGoogleKey('')
@@ -191,6 +193,7 @@ export default function AISettingsPage() {
         cpu_limit_percent: provider === 'llamacpp' ? cpuLimit : undefined,
         n_gpu_layers: provider === 'llamacpp' ? nGpuLayers : undefined,
         google_search_cx: googleCx.trim() || null,
+        relevance_threshold: relevanceThreshold,
       }
       if (apiKey.trim()) payload.api_key = apiKey.trim()
       if (serperKey.trim()) payload.serper_api_key = serperKey.trim()
@@ -468,6 +471,36 @@ export default function AISettingsPage() {
               placeholder={current?.google_search_cx ?? 'e.g. 123456789:xyz'} />
           </div>
         </details>
+      </section>
+
+      {/* Relevance Threshold */}
+      <section style={card}>
+        <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Article Relevance Filter</h2>
+        <p style={{ fontSize: 12, color: '#888', marginBottom: 14, lineHeight: 1.5 }}>
+          After AI enrichment, articles scored below this threshold are <strong>permanently deleted</strong> from the queue.
+          Lower values keep more articles (less aggressive filtering). Default is 0.3.
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <input
+            type="range"
+            min={0}
+            max={0.9}
+            step={0.05}
+            value={relevanceThreshold}
+            onChange={e => setRelevanceThreshold(parseFloat(e.target.value))}
+            style={{ flex: 1, accentColor: 'var(--brand-color)' }}
+          />
+          <span style={{
+            minWidth: 40, textAlign: 'center', fontSize: 14, fontWeight: 600,
+            color: relevanceThreshold >= 0.6 ? '#c62828' : relevanceThreshold >= 0.4 ? '#e65100' : '#2e7d32',
+          }}>
+            {relevanceThreshold.toFixed(2)}
+          </span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#aaa', marginTop: 4 }}>
+          <span>0.00 — keep everything</span>
+          <span>0.90 — very strict</span>
+        </div>
       </section>
 
       {/* Test */}

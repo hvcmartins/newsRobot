@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float
 from app.database import Base
 
 
@@ -19,5 +19,6 @@ class AIConfig(Base):
     serper_api_key = Column(String(500), nullable=True)              # Serper.dev (Google Search)
     google_search_api_key = Column(String(500), nullable=True)       # Google Custom Search (legacy)
     google_search_cx = Column(String(200), nullable=True)            # Custom Search Engine ID (legacy)
+    relevance_threshold = Column(Float, default=0.3, nullable=False) # articles below this score are deleted
     updated_at = Column(DateTime, default=datetime.datetime.utcnow,
                         onupdate=datetime.datetime.utcnow)

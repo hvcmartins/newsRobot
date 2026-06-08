@@ -34,6 +34,7 @@ def _to_read(cfg: AIConfig) -> AIConfigRead:
         serper_api_key_set=bool(cfg.serper_api_key),
         google_search_api_key_set=bool(cfg.google_search_api_key),
         google_search_cx=cfg.google_search_cx,
+        relevance_threshold=float(cfg.relevance_threshold) if cfg.relevance_threshold is not None else 0.3,
     )
 
 
@@ -61,6 +62,7 @@ def update_ai_config(payload: AIConfigUpdate, db: Session = Depends(get_db)):
         cfg.google_search_api_key = payload.google_search_api_key.strip() or None
     if payload.google_search_cx is not None:
         cfg.google_search_cx = payload.google_search_cx.strip() or None
+    cfg.relevance_threshold = max(0.0, min(0.9, payload.relevance_threshold))
     db.commit()
     db.refresh(cfg)
     reset_provider()

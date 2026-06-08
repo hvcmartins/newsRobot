@@ -12,6 +12,7 @@ export interface AIConfigRead {
   serper_api_key_set: boolean
   google_search_api_key_set: boolean
   google_search_cx: string | null
+  relevance_threshold: number
 }
 
 export interface AIConfigUpdate {
@@ -26,6 +27,7 @@ export interface AIConfigUpdate {
   serper_api_key?: string | null
   google_search_api_key?: string | null
   google_search_cx?: string | null
+  relevance_threshold?: number
 }
 
 export interface LocalModel {
