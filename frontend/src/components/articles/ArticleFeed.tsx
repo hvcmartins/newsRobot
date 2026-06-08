@@ -12,6 +12,7 @@ interface Props {
   onReEnrich?: (id: number) => void
   onFetchImage?: (id: number) => void
   categoryOrder?: string[]
+  highlightId?: number
 }
 
 const _UNCATEGORIZED = new Set(['Uncategorized', 'Other', '', undefined, null])
@@ -40,7 +41,7 @@ const grid: React.CSSProperties = {
 }
 
 export default function ArticleFeed({
-  articles, isLoading, onMarkRead, onReEnrich, onFetchImage, categoryOrder = [],
+  articles, isLoading, onMarkRead, onReEnrich, onFetchImage, categoryOrder = [], highlightId,
 }: Props) {
   if (isLoading) {
     return (
@@ -89,7 +90,7 @@ export default function ArticleFeed({
             )}
             <div style={grid}>
               {catArticles.map(a => (
-                <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} onFetchImage={onFetchImage} />
+                <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} onFetchImage={onFetchImage} highlight={highlightId === a.id} />
               ))}
             </div>
           </div>
@@ -101,7 +102,7 @@ export default function ArticleFeed({
   return (
     <div style={{ ...grid, marginBottom: 24 }}>
       {articles.map(a => (
-        <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} onFetchImage={onFetchImage} />
+        <ArticleCard key={a.id} article={a} onMarkRead={onMarkRead} onReEnrich={onReEnrich} onFetchImage={onFetchImage} highlight={highlightId === a.id} />
       ))}
     </div>
   )

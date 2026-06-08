@@ -18,7 +18,7 @@ export interface ScrapedUrlPage {
 }
 
 export const scrapedUrlsApi = {
-  list: (params: { tenant_id: number; source_id?: number; q?: string; page?: number; size?: number; sort_by?: string; sort_dir?: string }) =>
+  list: (params: { tenant_id: number; source_id?: number; q?: string; page?: number; size?: number; sort_by?: string; sort_dir?: string; status_filter?: string }) =>
     client.get<ScrapedUrlPage>('/api/scraped-urls/', { params }).then((r) => r.data),
 
   add: (body: { tenant_id: number; url: string; source_id?: number | null }) =>

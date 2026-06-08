@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import type { Article } from '@/api/types'
 import Badge from '@/components/ui/Badge'
@@ -9,6 +9,7 @@ interface Props {
   onMarkRead?: (id: number) => void
   onReEnrich?: (id: number) => void
   onFetchImage?: (id: number) => void
+  highlight?: boolean
 }
 
 function relevanceStyle(score: number, aiEnriched: boolean): {
@@ -33,21 +34,37 @@ function relevanceStyle(score: number, aiEnriched: boolean): {
   }
 }
 
-export default function ArticleCard({ article, onMarkRead, onReEnrich, onFetchImage }: Props) {
+export default function ArticleCard({ article, onMarkRead, onReEnrich, onFetchImage, highlight }: Props) {
   const [fetchingImg, setFetchingImg] = useState(false)
   const displayText = article.summary || article.excerpt
   const date = article.published_at || article.scraped_at
   const rel = relevanceStyle(article.relevance_score, article.ai_enriched)
 
+  const cardRef = useRef<HTMLElement>(null)
+  const [lit, setLit] = useState(false)
+
+  useEffect(() => {
+    if (!highlight) return
+    setLit(true)
+    const scrollTimer = setTimeout(() => {
+      cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 80)
+    const fadeTimer = setTimeout(() => setLit(false), 2200)
+    return () => { clearTimeout(scrollTimer); clearTimeout(fadeTimer) }
+  }, [highlight])
+
   return (
     <article
+      ref={cardRef}
       style={{
-        background: '#fff',
+        background: lit ? '#fffbeb' : '#fff',
         borderRadius: 10,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.07)',
+        boxShadow: lit
+          ? '0 0 0 3px #f59e0b, 0 1px 3px rgba(0,0,0,0.07)'
+          : '0 1px 3px rgba(0,0,0,0.07)',
         overflow: 'hidden',
         opacity: article.is_read ? 0.65 : 1,
-        transition: 'box-shadow 0.15s',
+        transition: 'background 0.7s ease-out, box-shadow 0.7s ease-out',
         display: 'flex',
         flexDirection: 'column',
         borderLeft: rel ? `3px solid ${rel.borderColor}` : '3px solid transparent',

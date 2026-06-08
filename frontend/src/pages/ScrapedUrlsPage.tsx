@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, parseISO } from 'date-fns'
 import { useTenant } from '@/contexts/TenantContext'
@@ -11,6 +11,7 @@ const PAGE_SIZE = 50
 
 type SortBy = 'scraped_at' | 'source' | 'status'
 type SortDir = 'asc' | 'desc'
+type StatusFilter = '' | 'none' | 'queue' | 'archived'
 
 // ── Add URL modal ─────────────────────────────────────────────────────────────
 function AddUrlModal({
@@ -108,10 +109,12 @@ function AddUrlModal({
 export default function ScrapedUrlsPage() {
   const { activeTenant } = useTenant()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const tenantId = activeTenant?.id
 
   const [page, setPage] = useState(1)
   const [sourceFilter, setSourceFilter] = useState<number | undefined>(undefined)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const [q, setQ] = useState('')
   const [debouncedQ, setDebouncedQ] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -150,12 +153,13 @@ export default function ScrapedUrlsPage() {
   }, [])
 
   const { data, isFetching } = useQuery({
-    queryKey: ['scraped-urls', tenantId, sourceFilter, page, debouncedQ, sortBy, sortDir],
+    queryKey: ['scraped-urls', tenantId, sourceFilter, page, debouncedQ, sortBy, sortDir, statusFilter],
     queryFn: () =>
       tenantId
         ? scrapedUrlsApi.list({
             tenant_id: tenantId, source_id: sourceFilter, q: debouncedQ,
             page, size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir,
+            status_filter: statusFilter || undefined,
           })
         : null,
     enabled: !!tenantId,
@@ -232,7 +236,7 @@ export default function ScrapedUrlsPage() {
   }
 
   // Sortable column header
-  const SortTh = ({ col, label, style }: { col: SortBy; label: string; style?: React.CSSProperties }) => {
+  const SortTh = ({ col, label, style: extraStyle }: { col: SortBy; label: string; style?: React.CSSProperties }) => {
     const active = sortBy === col
     return (
       <th
@@ -243,7 +247,7 @@ export default function ScrapedUrlsPage() {
           textTransform: 'uppercase', letterSpacing: '0.5px',
           borderBottom: '1px solid #eee', cursor: 'pointer',
           userSelect: 'none', whiteSpace: 'nowrap',
-          ...style,
+          ...extraStyle,
         }}
       >
         {label}{' '}
@@ -309,11 +313,24 @@ export default function ScrapedUrlsPage() {
           onChange={(e) => { setSourceFilter(e.target.value ? parseInt(e.target.value) : undefined); setPage(1); setSelected(new Set()) }}
           style={{
             padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6,
-            fontSize: 13, background: '#fff', minWidth: 180,
+            fontSize: 13, background: '#fff', minWidth: 160,
           }}
         >
           <option value="">All Sources</option>
           {sources?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value as StatusFilter); setPage(1); setSelected(new Set()) }}
+          style={{
+            padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 6,
+            fontSize: 13, background: '#fff', minWidth: 140,
+          }}
+        >
+          <option value="">All Statuses</option>
+          <option value="none">— No article</option>
+          <option value="queue">In queue</option>
+          <option value="archived">Archived</option>
         </select>
         <input
           type="text"
@@ -347,7 +364,6 @@ export default function ScrapedUrlsPage() {
                   style={{ cursor: 'pointer' }}
                 />
               </th>
-              {/* Non-sortable URL column */}
               <th style={{
                 padding: '10px 14px', textAlign: 'left', fontSize: 11,
                 fontWeight: 600, color: '#888', textTransform: 'uppercase',
@@ -363,7 +379,7 @@ export default function ScrapedUrlsPage() {
             {pageItems.length === 0 && !isFetching && (
               <tr>
                 <td colSpan={6} style={{ padding: 48, textAlign: 'center', color: '#bbb', fontSize: 13 }}>
-                  {debouncedQ || sourceFilter ? 'No entries match your filters.' : 'No seen URLs recorded yet.'}
+                  {debouncedQ || sourceFilter || statusFilter ? 'No entries match your filters.' : 'No seen URLs recorded yet.'}
                 </td>
               </tr>
             )}
@@ -413,20 +429,31 @@ export default function ScrapedUrlsPage() {
                 </td>
                 <td style={{ padding: '8px 14px' }}>
                   {row.article_id ? (
-                    <Link
-                      to={row.article_archived ? '/archive' : '/articles'}
-                      style={{
-                        display: 'inline-block', fontSize: 10, fontWeight: 600,
-                        padding: '2px 7px', borderRadius: 10, textDecoration: 'none',
-                        background: row.article_archived ? '#f3f4f6' : '#fef9c3',
-                        color: row.article_archived ? '#6b7280' : '#854d0e',
-                      }}
-                      title={row.article_archived
-                        ? 'Article is archived — click to open archive'
-                        : 'Article is in the news queue — click to open queue'}
-                    >
-                      {row.article_archived ? 'Archived' : 'In queue'}
-                    </Link>
+                    row.article_archived ? (
+                      <Link
+                        to="/archive"
+                        style={{
+                          display: 'inline-block', fontSize: 10, fontWeight: 600,
+                          padding: '2px 7px', borderRadius: 10, textDecoration: 'none',
+                          background: '#f3f4f6', color: '#6b7280',
+                        }}
+                        title="Article is archived — click to open archive"
+                      >
+                        Archived
+                      </Link>
+                    ) : (
+                      <button
+                        onClick={() => navigate(`/articles?highlight=${row.article_id}`)}
+                        style={{
+                          display: 'inline-block', fontSize: 10, fontWeight: 600,
+                          padding: '2px 7px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                          background: '#fef9c3', color: '#854d0e',
+                        }}
+                        title="Article is in the news queue — click to jump to it"
+                      >
+                        In queue
+                      </button>
+                    )
                   ) : (
                     <span style={{ fontSize: 10, color: '#d1d5db' }}>—</span>
                   )}

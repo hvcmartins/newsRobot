@@ -35,12 +35,15 @@ def list_scraped_urls(
     size: int = Query(default=50, le=200),
     sort_by: str = "scraped_at",
     sort_dir: str = "desc",
+    status_filter: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     if sort_by not in ("scraped_at", "source", "status"):
         sort_by = "scraped_at"
     if sort_dir not in ("asc", "desc"):
         sort_dir = "desc"
+    if status_filter not in (None, "none", "queue", "archived"):
+        status_filter = None
 
     base = db.query(ScrapedUrl).filter(ScrapedUrl.tenant_id == tenant_id)
     if source_id is not None:
@@ -48,20 +51,34 @@ def list_scraped_urls(
     if q:
         base = base.filter(ScrapedUrl.url.ilike(f"%{q}%"))
 
-    total = base.count()
-
-    # Build order expression, adding a JOIN only when needed for sorting
-    if sort_by == "source":
-        base = base.outerjoin(Source, ScrapedUrl.source_id == Source.id)
-        order_col = Source.name.asc() if sort_dir == "asc" else Source.name.desc()
-    elif sort_by == "status":
+    # Add Article join when needed for status filtering or status sort
+    art_alias = None
+    if sort_by == "status" or status_filter:
         art_alias = aliased(Article)
         base = base.outerjoin(
             art_alias,
             (art_alias.tenant_id == ScrapedUrl.tenant_id) &
             (art_alias.url == ScrapedUrl.url),
         )
-        # 0 = no article, 1 = in queue, 2 = archived
+
+    # Apply status filter before counting
+    if status_filter == "none":
+        base = base.filter(art_alias.id.is_(None))
+    elif status_filter == "queue":
+        base = base.filter(art_alias.id.isnot(None), art_alias.archived_at.is_(None))
+    elif status_filter == "archived":
+        base = base.filter(art_alias.id.isnot(None), art_alias.archived_at.isnot(None))
+
+    total = base.count()
+
+    # Add Source join only for source sort (after count, only affects ordering)
+    if sort_by == "source":
+        base = base.outerjoin(Source, ScrapedUrl.source_id == Source.id)
+
+    # Build order expression
+    if sort_by == "source":
+        order_col = Source.name.asc() if sort_dir == "asc" else Source.name.desc()
+    elif sort_by == "status":
         status_expr = case(
             (art_alias.id.is_(None), 0),
             (art_alias.archived_at.is_(None), 1),

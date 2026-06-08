@@ -1,4 +1,5 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { parseUTC } from '@/utils/dates'
@@ -13,6 +14,16 @@ export default function ArticlesPage() {
   const { activeTenant } = useTenant()
   const qc = useQueryClient()
   const [filters, setFilters] = useState<Filters>({})
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const highlightId = searchParams.get('highlight') ? parseInt(searchParams.get('highlight')!) : undefined
+
+  // Clear the highlight URL param after the animation plays
+  useEffect(() => {
+    if (!highlightId) return
+    const t = setTimeout(() => navigate('/articles', { replace: true }), 3500)
+    return () => clearTimeout(t)
+  }, [highlightId, navigate])
 
   const tenantId = activeTenant?.id ?? 0
 
@@ -193,6 +204,7 @@ export default function ArticlesPage() {
         onMarkRead={(id) => markReadMut.mutate(id)}
         onReEnrich={(id) => reEnrichSingleMut.mutate(id)}
         onFetchImage={(id) => fetchImageMut.mutate(id)}
+        highlightId={highlightId}
       />
     </div>
   )
