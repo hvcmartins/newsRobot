@@ -55,7 +55,7 @@ class OpenAIProvider(AIProvider):
         self._embedding_model = embedding_model or "text-embedding-3-small"
 
     def _ask(self, prompt: str, max_tokens: int = 512,
-             system: str | None = None) -> str:
+             system: str | None = None, temperature: float = 0.0) -> str:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -64,6 +64,7 @@ class OpenAIProvider(AIProvider):
         resp = self._client.chat.completions.create(
             model=self._model,
             max_tokens=max_tokens,
+            temperature=temperature,
             messages=messages,
             **({"extra_body": self._extra_body} if self._extra_body else {}),
         )

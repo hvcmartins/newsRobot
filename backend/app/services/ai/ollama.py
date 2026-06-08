@@ -44,10 +44,11 @@ class OllamaProvider(AIProvider):
                     "model": self._model,
                     "messages": messages,
                     "max_tokens": max_tokens,
-                    # Qwen3 recommended sampling params for non-thinking mode.
-                    # Lower temperature for JSON tasks (deterministic), higher for prose.
-                    "temperature": 0.7 if thinking else 0.3,
-                    "top_p": 0.95 if thinking else 0.8,
+                    # temperature=0 for structured JSON tasks (deterministic scores).
+                    # Thinking mode keeps 0.6 — the reasoning phase benefits from
+                    # some exploration; the final answer is still extracted cleanly.
+                    "temperature": 0.6 if thinking else 0.0,
+                    "top_p": 0.95 if thinking else 1.0,
                 },
             )
             resp.raise_for_status()

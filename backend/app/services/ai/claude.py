@@ -24,10 +24,11 @@ class ClaudeProvider(AIProvider):
         self._model = model
 
     def _ask(self, prompt: str, max_tokens: int = 512,
-             system: str | None = None) -> str:
+             system: str | None = None, temperature: float = 0.0) -> str:
         kwargs: dict = dict(
             model=self._model,
             max_tokens=max_tokens,
+            temperature=temperature,
             messages=[{"role": "user", "content": prompt}],
         )
         if system:

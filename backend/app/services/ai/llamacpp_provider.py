@@ -58,7 +58,7 @@ class LlamaCppProvider(AIProvider):
         user_content = prompt if thinking else f"/no_think\n\n{prompt}"
         # JSON tasks: low temperature for determinism.
         # Narrative/reasoning tasks: higher temperature per Qwen3 docs.
-        temp = temperature if temperature is not None else (0.6 if thinking else 0.1)
+        temp = temperature if temperature is not None else (0.6 if thinking else 0.0)
         # Serialize all inference calls — llama_cpp's Llama object is not
         # thread-safe; concurrent calls from the enrichment thread pool
         # cause segfaults that crash the entire container.
