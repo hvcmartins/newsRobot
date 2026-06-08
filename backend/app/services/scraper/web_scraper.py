@@ -108,6 +108,8 @@ def _parse_date(value: str) -> datetime.datetime | None:
             "%d %b %Y",
             "%m/%d/%Y",
             "%d/%m/%Y",
+            "%d.%m.%Y",          # European: 08.06.2026
+            "%d.%m.%Y %H:%M",    # European with time: 08.06.2026 14:30
         ):
             try:
                 dt = datetime.datetime.strptime(candidate, fmt)
@@ -188,6 +190,17 @@ def _extract_date_from_item(item) -> datetime.datetime | None:
                 dt = _parse_date(txt)
                 if dt:
                     return dt
+
+    # 5. Last resort: any leaf element (no children) with short text that parses as a date.
+    #    Catches plain-text dates in elements like Bootstrap's .card-footer.
+    for el in item.find_all(True):
+        if el.find():   # skip non-leaf elements
+            continue
+        txt = el.get_text(strip=True)
+        if txt and 6 <= len(txt) <= 30:
+            dt = _parse_date(txt)
+            if dt:
+                return dt
 
     return None
 
