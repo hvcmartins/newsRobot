@@ -360,7 +360,19 @@ def _enrich_article(article_id: int, topic_profile: str | None,
         ai_log.info("Enriched '%s' → %s", title_short, result.category or "—")
 
         if real_url != a_url:
-            article.url = real_url
+            # Guard against UNIQUE(tenant_id, url) collision: another article
+            # may have been inserted with real_url (e.g. from a different source).
+            url_taken = db.query(Article.id).filter(
+                Article.tenant_id == a_tenant_id,
+                Article.url == real_url,
+                Article.id != article_id,
+            ).first()
+            if not url_taken:
+                article.url = real_url
+            else:
+                ai_log.debug(
+                    "Resolved URL already used by article %d — keeping original", url_taken[0]
+                )
         if new_image and not article.image_url:
             article.image_url = new_image
         if new_embedding_json and not article.title_embedding:

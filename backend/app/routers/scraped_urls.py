@@ -2,7 +2,8 @@ import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy import case
+from sqlalchemy.orm import Session, aliased
 
 from app.database import get_db
 from app.models import Source, Article
@@ -20,8 +21,6 @@ def _row_to_dict(row: ScrapedUrl, source_map: dict, article_map: dict) -> dict:
         "source_id": row.source_id,
         "source_name": source_map.get(row.source_id) if row.source_id else None,
         "scraped_at": row.scraped_at.isoformat() if row.scraped_at else None,
-        # article_id / article_archived let the UI warn that removing this
-        # entry won't allow re-scraping until the article itself is deleted.
         "article_id": art["id"] if art else None,
         "article_archived": art["archived"] if art else None,
     }
@@ -34,8 +33,15 @@ def list_scraped_urls(
     q: str = "",
     page: int = 1,
     size: int = Query(default=50, le=200),
+    sort_by: str = "scraped_at",
+    sort_dir: str = "desc",
     db: Session = Depends(get_db),
 ):
+    if sort_by not in ("scraped_at", "source", "status"):
+        sort_by = "scraped_at"
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
+
     base = db.query(ScrapedUrl).filter(ScrapedUrl.tenant_id == tenant_id)
     if source_id is not None:
         base = base.filter(ScrapedUrl.source_id == source_id)
@@ -43,8 +49,31 @@ def list_scraped_urls(
         base = base.filter(ScrapedUrl.url.ilike(f"%{q}%"))
 
     total = base.count()
+
+    # Build order expression, adding a JOIN only when needed for sorting
+    if sort_by == "source":
+        base = base.outerjoin(Source, ScrapedUrl.source_id == Source.id)
+        order_col = Source.name.asc() if sort_dir == "asc" else Source.name.desc()
+    elif sort_by == "status":
+        art_alias = aliased(Article)
+        base = base.outerjoin(
+            art_alias,
+            (art_alias.tenant_id == ScrapedUrl.tenant_id) &
+            (art_alias.url == ScrapedUrl.url),
+        )
+        # 0 = no article, 1 = in queue, 2 = archived
+        status_expr = case(
+            (art_alias.id.is_(None), 0),
+            (art_alias.archived_at.is_(None), 1),
+            else_=2,
+        )
+        order_col = status_expr.asc() if sort_dir == "asc" else status_expr.desc()
+    else:
+        order_col = (ScrapedUrl.scraped_at.asc() if sort_dir == "asc"
+                     else ScrapedUrl.scraped_at.desc())
+
     rows = (
-        base.order_by(ScrapedUrl.scraped_at.desc())
+        base.order_by(order_col)
         .offset((page - 1) * size)
         .limit(size)
         .all()
@@ -57,8 +86,7 @@ def list_scraped_urls(
         for src in db.query(Source.id, Source.name).filter(Source.id.in_(source_ids)).all():
             source_map[src.id] = src.name
 
-    # Check which URLs still have a live Article — those will still be detected
-    # as duplicates even after removing the ScrapedUrl entry.
+    # Check which URLs still have a live Article
     page_urls = [r.url for r in rows]
     article_map: dict = {}
     if page_urls:
@@ -89,7 +117,6 @@ def add_scraped_url(body: AddUrlBody, db: Session = Depends(get_db)):
     import datetime
     from sqlalchemy.exc import IntegrityError
 
-    # Validate source belongs to tenant
     if body.source_id:
         src = db.get(Source, body.source_id)
         if not src or src.tenant_id != body.tenant_id:
@@ -114,7 +141,7 @@ def add_scraped_url(body: AddUrlBody, db: Session = Depends(get_db)):
         if src:
             source_map[src.id] = src.name
     logger.info("Manually added scraped URL for tenant %d: %s", body.tenant_id, body.url)
-    return _row_to_dict(row, source_map)
+    return _row_to_dict(row, source_map, {})
 
 
 @router.delete("/{url_id}", status_code=200)

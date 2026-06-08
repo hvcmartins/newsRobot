@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow, parseISO } from 'date-fns'
 import { useTenant } from '@/contexts/TenantContext'
@@ -7,6 +8,9 @@ import { sourceApi } from '@/api/sources'
 import type { Source } from '@/api/types'
 
 const PAGE_SIZE = 50
+
+type SortBy = 'scraped_at' | 'source' | 'status'
+type SortDir = 'asc' | 'desc'
 
 // ── Add URL modal ─────────────────────────────────────────────────────────────
 function AddUrlModal({
@@ -112,6 +116,9 @@ export default function ScrapedUrlsPage() {
   const [debouncedQ, setDebouncedQ] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const [sortBy, setSortBy] = useState<SortBy>('scraped_at')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [showAdd, setShowAdd] = useState(false)
 
@@ -129,11 +136,27 @@ export default function ScrapedUrlsPage() {
     }, 300)
   }, [])
 
+  const handleSort = useCallback((col: SortBy) => {
+    setSortBy((prev) => {
+      if (prev === col) {
+        setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
+        return prev
+      }
+      setSortDir('desc')
+      return col
+    })
+    setPage(1)
+    setSelected(new Set())
+  }, [])
+
   const { data, isFetching } = useQuery({
-    queryKey: ['scraped-urls', tenantId, sourceFilter, page, debouncedQ],
+    queryKey: ['scraped-urls', tenantId, sourceFilter, page, debouncedQ, sortBy, sortDir],
     queryFn: () =>
       tenantId
-        ? scrapedUrlsApi.list({ tenant_id: tenantId, source_id: sourceFilter, q: debouncedQ, page, size: PAGE_SIZE })
+        ? scrapedUrlsApi.list({
+            tenant_id: tenantId, source_id: sourceFilter, q: debouncedQ,
+            page, size: PAGE_SIZE, sort_by: sortBy, sort_dir: sortDir,
+          })
         : null,
     enabled: !!tenantId,
     placeholderData: (prev) => prev,
@@ -159,7 +182,6 @@ export default function ScrapedUrlsPage() {
         `• OK  → Remove URL entry AND delete the article (allows fresh re-scrape)\n` +
         `• Cancel → Remove URL entry only (article stays; scraper will still skip it as a duplicate)`
       )
-      // true = user clicked OK = also delete the article
       deleteMut.mutate({ id: row.id, deleteArticle: choice })
     } else {
       deleteMut.mutate({ id: row.id, deleteArticle: false })
@@ -207,6 +229,29 @@ export default function ScrapedUrlsPage() {
       if (next.has(id)) next.delete(id); else next.add(id)
       return next
     })
+  }
+
+  // Sortable column header
+  const SortTh = ({ col, label, style }: { col: SortBy; label: string; style?: React.CSSProperties }) => {
+    const active = sortBy === col
+    return (
+      <th
+        onClick={() => handleSort(col)}
+        style={{
+          padding: '10px 14px', textAlign: 'left', fontSize: 11,
+          fontWeight: 600, color: active ? '#374151' : '#888',
+          textTransform: 'uppercase', letterSpacing: '0.5px',
+          borderBottom: '1px solid #eee', cursor: 'pointer',
+          userSelect: 'none', whiteSpace: 'nowrap',
+          ...style,
+        }}
+      >
+        {label}{' '}
+        <span style={{ fontSize: 10, color: active ? '#374151' : '#d1d5db' }}>
+          {active ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
+        </span>
+      </th>
+    )
   }
 
   if (!tenantId) return <div style={{ padding: 32, color: '#aaa' }}>No tenant selected.</div>
@@ -269,7 +314,6 @@ export default function ScrapedUrlsPage() {
         >
           <option value="">All Sources</option>
           {sources?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          <option value="__none__" disabled>— Manual (no source) —</option>
         </select>
         <input
           type="text"
@@ -303,13 +347,16 @@ export default function ScrapedUrlsPage() {
                   style={{ cursor: 'pointer' }}
                 />
               </th>
-              {['URL', 'Source', 'Status', 'Seen', ''].map((h) => (
-                <th key={h} style={{
-                  padding: '10px 14px', textAlign: 'left', fontSize: 11,
-                  fontWeight: 600, color: '#888', textTransform: 'uppercase',
-                  letterSpacing: '0.5px', borderBottom: '1px solid #eee',
-                }}>{h}</th>
-              ))}
+              {/* Non-sortable URL column */}
+              <th style={{
+                padding: '10px 14px', textAlign: 'left', fontSize: 11,
+                fontWeight: 600, color: '#888', textTransform: 'uppercase',
+                letterSpacing: '0.5px', borderBottom: '1px solid #eee',
+              }}>URL</th>
+              <SortTh col="source" label="Source" />
+              <SortTh col="status" label="Status" />
+              <SortTh col="scraped_at" label="Seen" />
+              <th style={{ padding: '10px 14px', borderBottom: '1px solid #eee' }} />
             </tr>
           </thead>
           <tbody>
@@ -366,18 +413,20 @@ export default function ScrapedUrlsPage() {
                 </td>
                 <td style={{ padding: '8px 14px' }}>
                   {row.article_id ? (
-                    <span style={{
-                      display: 'inline-block', fontSize: 10, fontWeight: 600,
-                      padding: '2px 7px', borderRadius: 10,
-                      background: row.article_archived ? '#f3f4f6' : '#fef9c3',
-                      color: row.article_archived ? '#6b7280' : '#854d0e',
-                    }}
+                    <Link
+                      to={row.article_archived ? '/archive' : '/articles'}
+                      style={{
+                        display: 'inline-block', fontSize: 10, fontWeight: 600,
+                        padding: '2px 7px', borderRadius: 10, textDecoration: 'none',
+                        background: row.article_archived ? '#f3f4f6' : '#fef9c3',
+                        color: row.article_archived ? '#6b7280' : '#854d0e',
+                      }}
                       title={row.article_archived
-                        ? 'Article is in the archive — removing this entry alone won\'t allow re-scraping'
-                        : 'Article is in the queue — removing this entry alone won\'t allow re-scraping'}
+                        ? 'Article is archived — click to open archive'
+                        : 'Article is in the news queue — click to open queue'}
                     >
                       {row.article_archived ? 'Archived' : 'In queue'}
-                    </span>
+                    </Link>
                   ) : (
                     <span style={{ fontSize: 10, color: '#d1d5db' }}>—</span>
                   )}
